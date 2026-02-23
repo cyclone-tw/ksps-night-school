@@ -137,7 +137,9 @@ function doGet(e) {
         result = handleAdminAction(e, loadAdminConfig);
         break;
       case 'get_dashboard':
-        result = handleAdminAction(e, getDashboard);
+        result = handleAdminAction(e, function() {
+          return getDashboard(e.parameter.date);
+        });
         break;
       case 'get_students_in_range':
         result = handleAdminAction(e, function() {
@@ -407,21 +409,32 @@ function loadAdminConfig() {
   };
 }
 
-function getDashboard() {
-  var today = new Date();
-  var todayStr = Utilities.formatDate(today, 'Asia/Taipei', 'yyyy-MM-dd');
+function getDashboard(dateParam) {
+  var targetStr = dateParam || Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
 
+  // 取得在學學生名冊（作為分母）
+  var studentSheet = getSheet('學生名冊');
+  var studentData = studentSheet.getDataRange().getValues();
+  var allStudents = [];
+  for (var s = 1; s < studentData.length; s++) {
+    if (studentData[s][1] === '在學') {
+      allStudents.push(studentData[s][0]);
+    }
+  }
+  var totalStudents = allStudents.length;
+
+  // 教學日誌
   var logSheet = getSheet('教學日誌');
   var logData = logSheet.getDataRange().getValues();
-  var todayLogs = [];
+  var dayLogs = [];
   for (var i = 1; i < logData.length; i++) {
     var logDate = logData[i][0];
     if (logDate instanceof Date) {
       logDate = Utilities.formatDate(logDate, 'Asia/Taipei', 'yyyy-MM-dd');
     }
-    if (logDate === todayStr) {
-      todayLogs.push({
-        date: todayStr,
+    if (logDate === targetStr) {
+      dayLogs.push({
+        date: targetStr,
         weekday: logData[i][1],
         time: logData[i][2],
         course: logData[i][3],
@@ -431,48 +444,62 @@ function getDashboard() {
     }
   }
 
+  // 出缺席
   var attSheet = getSheet('出缺席記錄');
   var attData = attSheet.getDataRange().getValues();
   var headers = attData[0];
-  var todayAttendance = null;
-  var presentCount = 0;
-  var absentCount = 0;
-  var totalStudents = 0;
+  var hasAttData = false;
+  var presentList = [];
+  var leaveList = [];
 
   for (var i = 1; i < attData.length; i++) {
     var attDate = attData[i][0];
     if (attDate instanceof Date) {
       attDate = Utilities.formatDate(attDate, 'Asia/Taipei', 'yyyy-MM-dd');
     }
-    if (attDate === todayStr) {
-      todayAttendance = {};
-      presentCount = 0;
-      absentCount = 0;
-      totalStudents = 0;
+    if (attDate === targetStr) {
+      hasAttData = true;
+      presentList = [];
+      leaveList = [];
       for (var c = 3; c < headers.length; c++) {
+        var name = headers[c];
         var status = attData[i][c];
-        if (status) {
-          totalStudents++;
-          if (status === '✓') presentCount++;
-          else if (status === '△') absentCount++;
-        }
+        if (status === '✓') presentList.push(name);
+        else if (status === '△') leaveList.push(name);
       }
-      // 不 break，取最後一筆（最新覆蓋的資料）
     }
   }
 
+  // 缺席 = 在學名冊 - 出席 - 請假
+  var markedNames = presentList.concat(leaveList);
+  var absentList = [];
+  if (hasAttData) {
+    for (var a = 0; a < allStudents.length; a++) {
+      if (markedNames.indexOf(allStudents[a]) === -1) {
+        absentList.push(allStudents[a]);
+      }
+    }
+  }
+
+  var presentCount = presentList.length;
+  var leaveCount = leaveList.length;
+  var absentCount = absentList.length;
   var attendanceRate = totalStudents > 0 ? Math.round(presentCount / totalStudents * 100) : 0;
 
   return {
     success: true,
-    date: todayStr,
-    todayLogs: todayLogs,
+    date: targetStr,
+    dayLogs: dayLogs,
     attendance: {
-      hasData: todayAttendance !== null,
-      presentCount: presentCount,
-      absentCount: absentCount,
+      hasData: hasAttData,
       totalStudents: totalStudents,
-      rate: attendanceRate
+      presentCount: presentCount,
+      leaveCount: leaveCount,
+      absentCount: absentCount,
+      rate: attendanceRate,
+      presentList: presentList,
+      leaveList: leaveList,
+      absentList: absentList
     }
   };
 }

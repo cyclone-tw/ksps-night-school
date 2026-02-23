@@ -451,8 +451,10 @@
 
         <!-- ===== Dashboard (管理者) ===== -->
         <div id="dashboard" class="content-section">
-            <h2 class="section-title">今日概覽</h2>
-            <div id="dashboardDate" style="text-align:center;color:#71717a;margin-bottom:15px;"></div>
+            <h2 class="section-title">七日概覽</h2>
+            <div style="text-align:center;margin-bottom:15px;">
+                <select id="dashDateSelect" class="form-input" style="width:auto;display:inline-block;min-width:180px;text-align:center;" onchange="loadDashboard()"></select>
+            </div>
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-number" id="dashRate">--%</div>
@@ -462,12 +464,32 @@
                     <div class="stat-number" id="dashPresent">--</div>
                     <div class="stat-label">出席人數</div>
                 </div>
-                <div class="stat-card red">
-                    <div class="stat-number" id="dashAbsent">--</div>
+                <div class="stat-card" style="background:linear-gradient(135deg,rgba(251,191,36,0.15),rgba(251,191,36,0.05));border-color:rgba(251,191,36,0.3);">
+                    <div class="stat-number" style="color:#fbbf24;" id="dashLeave">--</div>
                     <div class="stat-label">請假人數</div>
                 </div>
+                <div class="stat-card red">
+                    <div class="stat-number" id="dashAbsent">--</div>
+                    <div class="stat-label">缺席人數</div>
+                </div>
             </div>
-            <h3 style="color:#fbbf24;margin-bottom:15px;">今日教學日誌</h3>
+            <div id="dashStudentLists" style="display:none;margin-bottom:20px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                    <div>
+                        <h4 style="color:#4ade80;margin-bottom:8px;">出席</h4>
+                        <div id="dashPresentList" style="color:#d4d4d8;font-size:14px;line-height:1.8;"></div>
+                    </div>
+                    <div>
+                        <h4 style="color:#fbbf24;margin-bottom:8px;">請假</h4>
+                        <div id="dashLeaveList" style="color:#d4d4d8;font-size:14px;line-height:1.8;"></div>
+                    </div>
+                    <div>
+                        <h4 style="color:#f87171;margin-bottom:8px;">缺席</h4>
+                        <div id="dashAbsentList" style="color:#d4d4d8;font-size:14px;line-height:1.8;"></div>
+                    </div>
+                </div>
+            </div>
+            <h3 style="color:#fbbf24;margin-bottom:15px;">教學日誌</h3>
             <div id="dashLogs"><div class="no-data">載入中...</div></div>
         </div>
 
@@ -1068,33 +1090,66 @@
     }
 
     // ===== Dashboard =====
+    var dashDateInited = false;
+    function initDashDateSelect() {
+        if (dashDateInited) return;
+        dashDateInited = true;
+        var sel = document.getElementById('dashDateSelect');
+        var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+        for (var i = 0; i < 7; i++) {
+            var d = new Date();
+            d.setDate(d.getDate() - i);
+            var yyyy = d.getFullYear();
+            var mm = String(d.getMonth() + 1).padStart(2, '0');
+            var dd = String(d.getDate()).padStart(2, '0');
+            var val = yyyy + '-' + mm + '-' + dd;
+            var rocYear = yyyy - 1911;
+            var label = rocYear + '/' + (d.getMonth() + 1) + '/' + d.getDate() + ' 星期' + weekdays[d.getDay()];
+            if (i === 0) label += '（今天）';
+            var opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = label;
+            sel.appendChild(opt);
+        }
+    }
+
     function loadDashboard() {
         if (!isAdmin) return;
-        fetch(API_URL + '?action=get_dashboard&pwd=' + encodeURIComponent(adminPwd))
+        initDashDateSelect();
+        var selectedDate = document.getElementById('dashDateSelect').value;
+        fetch(API_URL + '?action=get_dashboard&date=' + selectedDate + '&pwd=' + encodeURIComponent(adminPwd))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.success) return;
-
-                // Date
-                var d = new Date(data.date);
-                var rocYear = d.getFullYear() - 1911;
-                var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-                document.getElementById('dashboardDate').textContent =
-                    rocYear + '/' + (d.getMonth() + 1) + '/' + d.getDate() + ' 星期' + weekdays[d.getDay()];
 
                 // Stats
                 var att = data.attendance;
                 document.getElementById('dashRate').textContent = att.hasData ? att.rate + '%' : '--%';
                 document.getElementById('dashPresent').textContent = att.hasData ? att.presentCount + ' / ' + att.totalStudents : '--';
+                document.getElementById('dashLeave').textContent = att.hasData ? att.leaveCount : '--';
                 document.getElementById('dashAbsent').textContent = att.hasData ? att.absentCount : '--';
+
+                // Student lists
+                var listsDiv = document.getElementById('dashStudentLists');
+                if (att.hasData) {
+                    listsDiv.style.display = 'block';
+                    document.getElementById('dashPresentList').innerHTML =
+                        att.presentList.length > 0 ? att.presentList.join('<br>') : '<span style="color:#71717a;">無</span>';
+                    document.getElementById('dashLeaveList').innerHTML =
+                        att.leaveList.length > 0 ? att.leaveList.join('<br>') : '<span style="color:#71717a;">無</span>';
+                    document.getElementById('dashAbsentList').innerHTML =
+                        att.absentList.length > 0 ? att.absentList.join('<br>') : '<span style="color:#71717a;">無</span>';
+                } else {
+                    listsDiv.style.display = 'none';
+                }
 
                 // Logs
                 var logsDiv = document.getElementById('dashLogs');
-                if (data.todayLogs.length === 0) {
-                    logsDiv.innerHTML = '<div class="no-data">今日尚無記錄</div>';
+                if (data.dayLogs.length === 0) {
+                    logsDiv.innerHTML = '<div class="no-data">該日尚無記錄</div>';
                 } else {
                     logsDiv.innerHTML = '';
-                    data.todayLogs.forEach(function(log) {
+                    data.dayLogs.forEach(function(log) {
                         logsDiv.innerHTML +=
                             '<div class="log-card">' +
                             '<h4>' + log.course + '</h4>' +
