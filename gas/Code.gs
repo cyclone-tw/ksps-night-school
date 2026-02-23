@@ -294,14 +294,24 @@ function loadConfig() {
 
 function submitLog(data) {
   var sheet = getSheet('教學日誌');
-  sheet.appendRow([
-    data.date,
-    data.weekday,
-    data.time,
-    data.course,
-    data.content,
-    data.teacher
-  ]);
+  var rows = sheet.getDataRange().getValues();
+  var existingRow = -1;
+  for (var i = 1; i < rows.length; i++) {
+    var rowDate = rows[i][0];
+    if (rowDate instanceof Date) {
+      rowDate = Utilities.formatDate(rowDate, 'Asia/Taipei', 'yyyy-MM-dd');
+    }
+    if (rowDate === data.date) {
+      existingRow = i + 1; // Sheet row is 1-based
+      break;
+    }
+  }
+  var rowData = [data.date, data.weekday, data.time, data.course, data.content, data.teacher];
+  if (existingRow > 0) {
+    sheet.getRange(existingRow, 1, 1, rowData.length).setValues([rowData]);
+  } else {
+    sheet.appendRow(rowData);
+  }
   return { success: true };
 }
 
@@ -318,13 +328,31 @@ function submitAttendance(data) {
     }
   });
 
+  // 找同日期的既有資料
+  var allData = sheet.getDataRange().getValues();
+  var existingRow = -1;
+  for (var i = 1; i < allData.length; i++) {
+    var rowDate = allData[i][0];
+    if (rowDate instanceof Date) {
+      rowDate = Utilities.formatDate(rowDate, 'Asia/Taipei', 'yyyy-MM-dd');
+    }
+    if (rowDate === data.date) {
+      existingRow = i + 1;
+      break;
+    }
+  }
+
   var row = [data.date, data.weekday, data.course];
   for (var c = 3; c < headers.length; c++) {
     var studentName = headers[c];
     row.push(data.attendance[studentName] || '');
   }
 
-  sheet.appendRow(row);
+  if (existingRow > 0) {
+    sheet.getRange(existingRow, 1, 1, row.length).setValues([row]);
+  } else {
+    sheet.appendRow(row);
+  }
   return { success: true };
 }
 
@@ -418,6 +446,9 @@ function getDashboard() {
     }
     if (attDate === todayStr) {
       todayAttendance = {};
+      presentCount = 0;
+      absentCount = 0;
+      totalStudents = 0;
       for (var c = 3; c < headers.length; c++) {
         var status = attData[i][c];
         if (status) {
@@ -426,7 +457,7 @@ function getDashboard() {
           else if (status === '△') absentCount++;
         }
       }
-      break;
+      // 不 break，取最後一筆（最新覆蓋的資料）
     }
   }
 
