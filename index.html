@@ -1213,7 +1213,9 @@
             .then(function(data) {
                 btn.disabled = false; btn.textContent = origText;
                 if (data.success) {
-                    showToast(data.fileName + ' 已生成至雲端硬碟', 'success');
+                    var msg = data.fileName + ' 已生成至雲端硬碟';
+                    if (data.moveError) msg += '（移動失敗: ' + data.moveError + '）';
+                    showToast(msg, 'success');
                 } else {
                     showToast('生成失敗: ' + data.error, 'error');
                 }

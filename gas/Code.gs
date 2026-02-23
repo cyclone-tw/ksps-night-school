@@ -25,9 +25,9 @@ function moveToReportFolder(fileId) {
     }
     var file = DriveApp.getFileById(fileId);
     file.moveTo(DriveApp.getFolderById(folderId));
+    return '';
   } catch (e) {
-    // 移動失敗不影響報表生成，檔案會留在根目錄
-    Logger.log('moveToReportFolder error: ' + e.message);
+    return e.message;
   }
 }
 
@@ -649,13 +649,14 @@ function exportTeachingLog(yearStr, monthStr) {
   ws.setRowHeight(signRow, 60);
 
   var fileId = newSS.getId();
-  moveToReportFolder(fileId);
+  var moveError = moveToReportFolder(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
     success: true,
     fileName: fileName,
     sheetUrl: sheetUrl,
+    moveError: moveError,
     recordCount: records.length
   };
 }
@@ -797,7 +798,7 @@ function exportSalary(yearStr, monthStr) {
   ws.getRange(signRow, 8).setValue('校長').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
 
   var fileId = newSS.getId();
-  moveToReportFolder(fileId);
+  var moveError = moveToReportFolder(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
@@ -957,7 +958,7 @@ function exportPayslip(yearStr, monthStr) {
   }
 
   var fileId = newSS.getId();
-  moveToReportFolder(fileId);
+  var moveError = moveToReportFolder(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
@@ -1101,7 +1102,7 @@ function exportAttendance(startStr, endStr, studentsStr) {
   }
 
   var fileId = newSS.getId();
-  moveToReportFolder(fileId);
+  var moveError = moveToReportFolder(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
