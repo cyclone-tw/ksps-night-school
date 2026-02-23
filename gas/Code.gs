@@ -575,7 +575,7 @@ function exportTeachingLog(yearStr, monthStr) {
   ws.setColumnWidth(7, 200);
   ws.setColumnWidth(8, 90);
 
-  ws.merge(ws.getRange('A1:H1'));
+  ws.getRange('A1:H1').merge();
   var titleCell = ws.getRange('A1');
   titleCell.setValue(config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] +
                      ' ' + year + '年度' + month + '月 教學日誌');
@@ -617,10 +617,10 @@ function exportTeachingLog(yearStr, monthStr) {
   }
 
   var signRow = records.length + 5;
-  ws.merge(ws.getRange(signRow, 2, 1, 3));
+  ws.getRange(signRow, 2, 1, 3).merge();
   ws.getRange(signRow, 2).setValue('進修部主任：')
     .setFontFamily('標楷體').setFontSize(18).setFontWeight('bold');
-  ws.merge(ws.getRange(signRow, 5, 1, 2));
+  ws.getRange(signRow, 5, 1, 2).merge();
   ws.getRange(signRow, 5).setValue('校長：')
     .setFontFamily('標楷體').setFontSize(18).setFontWeight('bold');
   ws.setRowHeight(signRow, 60);
@@ -697,7 +697,7 @@ function exportSalary(yearStr, monthStr) {
   ws.setColumnWidth(8, 80);
   ws.setColumnWidth(9, 250);
 
-  ws.merge(ws.getRange('A1:I1'));
+  ws.getRange('A1:I1').merge();
   ws.getRange('A1').setValue(config['學校名稱'] + config['進修部名稱'] + '  ' + year + '年' + month + '月支給費用')
     .setFontFamily('標楷體').setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
   ws.setRowHeight(1, 35);
@@ -766,9 +766,9 @@ function exportSalary(yearStr, monthStr) {
 
   var signRow = totalRow + 2;
   ws.getRange(signRow, 1).setValue('承辦').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
-  ws.merge(ws.getRange(signRow, 3, 1, 2));
+  ws.getRange(signRow, 3, 1, 2).merge();
   ws.getRange(signRow, 3).setValue('出納').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
-  ws.merge(ws.getRange(signRow, 6, 1, 2));
+  ws.getRange(signRow, 6, 1, 2).merge();
   ws.getRange(signRow, 6).setValue('會計').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
   ws.getRange(signRow, 8).setValue('校長').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
 
@@ -853,7 +853,7 @@ function exportPayslip(yearStr, monthStr) {
     var stats = teacherStats[s.name] || { days: 0, dates: [] };
     var isSchoolMaster = (s.role === '校長');
 
-    ws.merge(ws.getRange(currentRow, 1, 1, 9));
+    ws.getRange(currentRow, 1, 1, 9).merge();
     var titleSuffix = '';
     if (isSchoolMaster) {
       titleSuffix = s.extraFeeName;
@@ -871,14 +871,14 @@ function exportPayslip(yearStr, monthStr) {
     if (isSchoolMaster) {
       var h = ['姓名', '上課期間', s.extraFeeName, '', '', '', '', '合計', '備註'];
       ws.getRange(currentRow, 1, 1, 9).setValues([h]);
-      ws.merge(ws.getRange(currentRow, 3, 1, 5));
+      ws.getRange(currentRow, 3, 1, 5).merge();
     } else if (s.extraFeeName) {
       var h = ['姓名', '上課期間', '天數', '節數', '單價', '合計', s.extraFeeName, '合計', '備註'];
       ws.getRange(currentRow, 1, 1, 9).setValues([h]);
     } else {
       var h = ['姓名', '上課期間', '天數', '節數', '單價', '合計', '', '', '備註'];
       ws.getRange(currentRow, 1, 1, 9).setValues([h]);
-      ws.merge(ws.getRange(currentRow, 6, 1, 3));
+      ws.getRange(currentRow, 6, 1, 3).merge();
     }
     ws.getRange(currentRow, 1, 1, 9).setFontFamily('標楷體').setFontSize(13).setFontWeight('bold')
       .setHorizontalAlignment('center').setVerticalAlignment('middle')
@@ -889,7 +889,7 @@ function exportPayslip(yearStr, monthStr) {
     if (isSchoolMaster) {
       ws.getRange(currentRow, 1).setValue(s.name);
       ws.getRange(currentRow, 2).setValue(periodStr);
-      ws.merge(ws.getRange(currentRow, 3, 1, 5));
+      ws.getRange(currentRow, 3, 1, 5).merge();
       ws.getRange(currentRow, 3).setValue(s.extraFeeAmount);
       ws.getRange(currentRow, 8).setValue(s.extraFeeAmount);
       ws.getRange(currentRow, 9).setValue(s.note);
@@ -909,7 +909,7 @@ function exportPayslip(yearStr, monthStr) {
         ws.getRange(currentRow, 7).setValue(s.extraFeeAmount);
         ws.getRange(currentRow, 8).setValue(grandTotal);
       } else {
-        ws.merge(ws.getRange(currentRow, 6, 1, 3));
+        ws.getRange(currentRow, 6, 1, 3).merge();
         ws.getRange(currentRow, 6).setValue(hourlyTotal);
       }
 
@@ -1028,7 +1028,7 @@ function exportAttendance(startStr, endStr, studentsStr) {
 
   var totalCols = 1 + classDates.length + 2;
 
-  ws.merge(ws.getRange(1, 1, 1, totalCols));
+  ws.getRange(1, 1, 1, totalCols).merge();
   ws.getRange(1, 1).setValue(config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] +
     ' 出缺席記錄表（' + startRoc + '～' + endRoc + '）')
     .setFontFamily('標楷體').setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
