@@ -9,20 +9,24 @@ function getSheet(name) {
   return getSpreadsheet().getSheetByName(name);
 }
 
+var DEFAULT_REPORT_FOLDER_ID = '***REDACTED_FOLDER_ID***';
+
 function moveToReportFolder(fileId) {
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var folderId = '';
-  for (var i = 0; i < settings.length; i++) {
-    if (settings[i][0] === '報表資料夾ID') {
-      folderId = String(settings[i][1]).trim();
-      break;
+  var folderId = DEFAULT_REPORT_FOLDER_ID;
+  try {
+    var settings = getSheet('系統設定').getDataRange().getValues();
+    for (var i = 0; i < settings.length; i++) {
+      var key = String(settings[i][0]).trim().replace(/\s/g, '');
+      if (key.indexOf('報表資料夾') !== -1 || key.indexOf('資料夾ID') !== -1) {
+        var val = String(settings[i][1]).trim();
+        if (val) folderId = val;
+        break;
+      }
     }
-  }
-  if (folderId) {
-    var file = DriveApp.getFileById(fileId);
-    DriveApp.getFolderById(folderId).addFile(file);
-    DriveApp.getRootFolder().removeFile(file);
-  }
+  } catch (e) {}
+  var file = DriveApp.getFileById(fileId);
+  DriveApp.getFolderById(folderId).addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
 }
 
 // ===== 初始化（執行一次即可） =====
@@ -644,12 +648,12 @@ function exportTeachingLog(yearStr, monthStr) {
 
   var fileId = newSS.getId();
   moveToReportFolder(fileId);
-  var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
+  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
     success: true,
     fileName: fileName + '.xlsx',
-    downloadUrl: downloadUrl,
+    sheetUrl: sheetUrl,
     recordCount: records.length
   };
 }
@@ -792,12 +796,12 @@ function exportSalary(yearStr, monthStr) {
 
   var fileId = newSS.getId();
   moveToReportFolder(fileId);
-  var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
+  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
     success: true,
     fileName: fileName + '.xlsx',
-    downloadUrl: downloadUrl
+    sheetUrl: sheetUrl
   };
 }
 
@@ -952,12 +956,12 @@ function exportPayslip(yearStr, monthStr) {
 
   var fileId = newSS.getId();
   moveToReportFolder(fileId);
-  var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
+  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
     success: true,
     fileName: fileName + '.xlsx',
-    downloadUrl: downloadUrl
+    sheetUrl: sheetUrl
   };
 }
 
@@ -1096,11 +1100,11 @@ function exportAttendance(startStr, endStr, studentsStr) {
 
   var fileId = newSS.getId();
   moveToReportFolder(fileId);
-  var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
+  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
     success: true,
     fileName: fileName + '.xlsx',
-    downloadUrl: downloadUrl
+    sheetUrl: sheetUrl
   };
 }

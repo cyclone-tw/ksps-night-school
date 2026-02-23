@@ -1213,8 +1213,7 @@
             .then(function(data) {
                 btn.disabled = false; btn.textContent = origText;
                 if (data.success) {
-                    window.open(data.downloadUrl, '_blank');
-                    showToast(data.fileName + ' 已生成', 'success');
+                    showToast(data.fileName + ' 已生成至雲端硬碟', 'success');
                 } else {
                     showToast('生成失敗: ' + data.error, 'error');
                 }
@@ -1287,8 +1286,7 @@
             .then(function(data) {
                 btn.disabled = false; btn.textContent = '生成出缺席報表 XLS';
                 if (data.success) {
-                    window.open(data.downloadUrl, '_blank');
-                    showToast(data.fileName + ' 已生成', 'success');
+                    showToast(data.fileName + ' 已生成至雲端硬碟', 'success');
                 } else {
                     showToast('生成失敗: ' + data.error, 'error');
                 }
