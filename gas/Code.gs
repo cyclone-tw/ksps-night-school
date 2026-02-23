@@ -463,6 +463,7 @@ function getDashboard(dateParam) {
       leaveList = [];
       for (var c = 3; c < headers.length; c++) {
         var name = headers[c];
+        if (allStudents.indexOf(name) === -1) continue; // 只算在學學生
         var status = attData[i][c];
         if (status === '✓') presentList.push(name);
         else if (status === '△') leaveList.push(name);

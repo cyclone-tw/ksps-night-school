@@ -452,6 +452,9 @@
         <!-- ===== Dashboard (管理者) ===== -->
         <div id="dashboard" class="content-section">
             <h2 class="section-title">七日概覽</h2>
+            <div style="text-align:center;margin-bottom:10px;">
+                <a href="https://docs.google.com/spreadsheets/d/1eaSKqrp7iQyW2yahpSV0a3ZT4A3jVo_lZjHpQQvcfNw/edit" target="_blank" style="color:#60a5fa;font-size:14px;text-decoration:none;border-bottom:1px dashed #60a5fa;">開啟 Google Sheets 原始資料</a>
+            </div>
             <div style="text-align:center;margin-bottom:15px;">
                 <select id="dashDateSelect" class="form-input" style="width:auto;display:inline-block;min-width:180px;text-align:center;" onchange="loadDashboard()"></select>
             </div>
@@ -1087,6 +1090,8 @@
         document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
         document.getElementById(tabName).classList.add('active');
         if (btn) btn.classList.add('active');
+
+        if (tabName === 'dashboard') loadDashboard();
     }
 
     // ===== Dashboard =====
