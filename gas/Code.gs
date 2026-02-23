@@ -12,8 +12,8 @@ function getSheet(name) {
 var DEFAULT_REPORT_FOLDER_ID = '***REDACTED_FOLDER_ID***';
 
 function moveToReportFolder(fileId) {
-  var folderId = DEFAULT_REPORT_FOLDER_ID;
   try {
+    var folderId = DEFAULT_REPORT_FOLDER_ID;
     var settings = getSheet('系統設定').getDataRange().getValues();
     for (var i = 0; i < settings.length; i++) {
       var key = String(settings[i][0]).trim().replace(/\s/g, '');
@@ -23,10 +23,12 @@ function moveToReportFolder(fileId) {
         break;
       }
     }
-  } catch (e) {}
-  var file = DriveApp.getFileById(fileId);
-  DriveApp.getFolderById(folderId).addFile(file);
-  DriveApp.getRootFolder().removeFile(file);
+    var file = DriveApp.getFileById(fileId);
+    file.moveTo(DriveApp.getFolderById(folderId));
+  } catch (e) {
+    // 移動失敗不影響報表生成，檔案會留在根目錄
+    Logger.log('moveToReportFolder error: ' + e.message);
+  }
 }
 
 // ===== 初始化（執行一次即可） =====
@@ -652,7 +654,7 @@ function exportTeachingLog(yearStr, monthStr) {
 
   return {
     success: true,
-    fileName: fileName + '.xlsx',
+    fileName: fileName,
     sheetUrl: sheetUrl,
     recordCount: records.length
   };
@@ -800,7 +802,7 @@ function exportSalary(yearStr, monthStr) {
 
   return {
     success: true,
-    fileName: fileName + '.xlsx',
+    fileName: fileName,
     sheetUrl: sheetUrl
   };
 }
@@ -960,7 +962,7 @@ function exportPayslip(yearStr, monthStr) {
 
   return {
     success: true,
-    fileName: fileName + '.xlsx',
+    fileName: fileName,
     sheetUrl: sheetUrl
   };
 }
@@ -1104,7 +1106,7 @@ function exportAttendance(startStr, endStr, studentsStr) {
 
   return {
     success: true,
-    fileName: fileName + '.xlsx',
+    fileName: fileName,
     sheetUrl: sheetUrl
   };
 }
