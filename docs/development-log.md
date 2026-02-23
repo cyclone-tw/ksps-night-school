@@ -92,7 +92,7 @@
 - **報表生成時**：將 fileId 存入 `ScriptProperties` 佇列（`queueFileMove()`）
 - **每分鐘觸發器**：`processMoveQueue()` 以 owner 權限執行，用 `DriveApp.getFileById().moveTo()` 移動檔案
 - **一次性設定**：在 GAS 編輯器執行 `setupMoveTrigger()` 建立觸發器
-- **資料夾 ID**：預設 `***REDACTED_FOLDER_ID***`，可在系統設定的「報表資料夾ID」欄位自訂
+- **資料夾 ID**：在 Google Sheet「系統設定」的「報表資料夾ID」欄位設定（不寫入程式碼）
 
 ### 部署注意事項
 

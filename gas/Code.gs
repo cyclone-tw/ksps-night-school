@@ -9,7 +9,7 @@ function getSheet(name) {
   return getSpreadsheet().getSheetByName(name);
 }
 
-var DEFAULT_REPORT_FOLDER_ID = '***REDACTED_FOLDER_ID***';
+var DEFAULT_REPORT_FOLDER_ID = ''; // 從 Google Sheet「系統設定」讀取，不寫入程式碼
 
 // Web App 匿名模式無法使用 Drive API，改用佇列 + 觸發器
 function queueFileMove(fileId) {
@@ -40,6 +40,8 @@ function processMoveQueue() {
       }
     }
   } catch (e) {}
+
+  if (!folderId) return; // 尚未設定資料夾 ID，跳過移動
 
   var folder = DriveApp.getFolderById(folderId);
   var remaining = [];
@@ -99,7 +101,7 @@ function initializeSheets() {
     ['每日節數', 3],
     ['上課時間', '19:00~21:00'],
     ['縣市名稱', '南投縣'],
-    ['報表資料夾ID', '***REDACTED_FOLDER_ID***']
+    ['報表資料夾ID', '']
   ]);
 
   // 2. 人員名冊
