@@ -166,6 +166,9 @@ function doGet(e) {
           return exportAttendance(e.parameter.start, e.parameter.end, e.parameter.students);
         });
         break;
+      case 'check_date':
+        result = checkDateExists(e.parameter.date);
+        break;
       case 'submit_log':
         var logData = JSON.parse(decodeURIComponent(e.parameter.data));
         result = submitLog(logData);
@@ -292,6 +295,26 @@ function loadConfig() {
     students: students,
     courses: courses
   };
+}
+
+function checkDateExists(dateStr) {
+  var hasLog = false;
+  var hasAtt = false;
+  var logSheet = getSheet('教學日誌');
+  var logData = logSheet.getDataRange().getValues();
+  for (var i = 1; i < logData.length; i++) {
+    var d = logData[i][0];
+    if (d instanceof Date) d = Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
+    if (d === dateStr) { hasLog = true; break; }
+  }
+  var attSheet = getSheet('出缺席記錄');
+  var attData = attSheet.getDataRange().getValues();
+  for (var i = 1; i < attData.length; i++) {
+    var d = attData[i][0];
+    if (d instanceof Date) d = Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
+    if (d === dateStr) { hasAtt = true; break; }
+  }
+  return { success: true, hasLog: hasLog, hasAttendance: hasAtt };
 }
 
 function submitLog(data) {

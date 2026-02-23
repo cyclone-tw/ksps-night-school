@@ -863,7 +863,7 @@
     function submitLog(e) {
         e.preventDefault();
         var btn = document.getElementById('logSubmitBtn');
-        btn.disabled = true; btn.textContent = '提交中...';
+        btn.disabled = true; btn.textContent = '檢查中...';
 
         var weekday = document.getElementById('logWeekday').value;
         var payload = {
@@ -875,21 +875,35 @@
             teacher: document.getElementById('logTeacher').value
         };
 
-        var url = API_URL + '?action=submit_log&data=' + encodeURIComponent(JSON.stringify(payload));
-        fetch(url)
+        // 先檢查該日期是否已有資料
+        fetch(API_URL + '?action=check_date&date=' + payload.date)
         .then(function(r) { return r.json(); })
-        .then(function(data) {
-            btn.disabled = false; btn.textContent = '提交教學日誌';
-            if (data.success) {
-                showToast('教學日誌提交成功！', 'success');
-                document.getElementById('logContent').value = '';
-            } else {
-                showToast('提交失敗: ' + data.error, 'error');
+        .then(function(check) {
+            if (check.hasLog && !confirm('該日期已有教學日誌紀錄，確定要覆蓋嗎？')) {
+                btn.disabled = false; btn.textContent = '提交教學日誌';
+                return;
             }
+            btn.textContent = '提交中...';
+            var url = API_URL + '?action=submit_log&data=' + encodeURIComponent(JSON.stringify(payload));
+            fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = '提交教學日誌';
+                if (data.success) {
+                    showToast('教學日誌提交成功！', 'success');
+                    document.getElementById('logContent').value = '';
+                } else {
+                    showToast('提交失敗: ' + data.error, 'error');
+                }
+            })
+            .catch(function(err) {
+                btn.disabled = false; btn.textContent = '提交教學日誌';
+                showToast('提交失敗，請檢查網路連線', 'error');
+            });
         })
         .catch(function(err) {
             btn.disabled = false; btn.textContent = '提交教學日誌';
-            showToast('提交失敗，請檢查網路連線', 'error');
+            showToast('檢查失敗，請檢查網路連線', 'error');
         });
     }
 
@@ -897,7 +911,7 @@
     function submitAttendance(e) {
         e.preventDefault();
         var btn = document.getElementById('attSubmitBtn');
-        btn.disabled = true; btn.textContent = '提交中...';
+        btn.disabled = true; btn.textContent = '檢查中...';
 
         var attendance = {};
         appStudents.forEach(function(s, idx) {
@@ -920,27 +934,41 @@
             attendance: attendance
         };
 
-        var url = API_URL + '?action=submit_attendance&data=' + encodeURIComponent(JSON.stringify(payload));
-        fetch(url)
+        // 先檢查該日期是否已有資料
+        fetch(API_URL + '?action=check_date&date=' + payload.date)
         .then(function(r) { return r.json(); })
-        .then(function(data) {
-            btn.disabled = false; btn.textContent = '提交出缺席記錄';
-            if (data.success) {
-                showToast('出缺席記錄提交成功！', 'success');
-                // Reset
-                appStudents.forEach(function(s, idx) {
-                    var hidden = document.querySelector('input[name="att_' + idx + '"]');
-                    hidden.value = '';
-                    var labels = hidden.parentElement.querySelectorAll('.att-radio-label');
-                    labels.forEach(function(l) { l.className = 'att-radio-label'; });
-                });
-            } else {
-                showToast('提交失敗: ' + data.error, 'error');
+        .then(function(check) {
+            if (check.hasAttendance && !confirm('該日期已有出缺席紀錄，確定要覆蓋嗎？')) {
+                btn.disabled = false; btn.textContent = '提交出缺席記錄';
+                return;
             }
+            btn.textContent = '提交中...';
+            var url = API_URL + '?action=submit_attendance&data=' + encodeURIComponent(JSON.stringify(payload));
+            fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = '提交出缺席記錄';
+                if (data.success) {
+                    showToast('出缺席記錄提交成功！', 'success');
+                    // Reset
+                    appStudents.forEach(function(s, idx) {
+                        var hidden = document.querySelector('input[name="att_' + idx + '"]');
+                        hidden.value = '';
+                        var labels = hidden.parentElement.querySelectorAll('.att-radio-label');
+                        labels.forEach(function(l) { l.className = 'att-radio-label'; });
+                    });
+                } else {
+                    showToast('提交失敗: ' + data.error, 'error');
+                }
+            })
+            .catch(function(err) {
+                btn.disabled = false; btn.textContent = '提交出缺席記錄';
+                showToast('提交失敗，請檢查網路連線', 'error');
+            });
         })
         .catch(function(err) {
             btn.disabled = false; btn.textContent = '提交出缺席記錄';
-            showToast('提交失敗，請檢查網路連線', 'error');
+            showToast('檢查失敗，請檢查網路連線', 'error');
         });
     }
 
