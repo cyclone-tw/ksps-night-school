@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國姓國小進修部管理系統</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+            color: #e1e1e6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .main-container { max-width: 900px; margin: 0 auto; }
+
+        /* === Header === */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: rgba(40, 42, 58, 0.9);
+            border-radius: 20px;
+            padding: 25px 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+        .header h1 {
+            font-size: 2em;
+            color: #00d4ff;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+            margin-bottom: 5px;
+        }
+        .header p { color: #a1a1aa; font-size: 1.1em; }
+        .admin-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #a1a1aa;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+        .admin-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+        .admin-btn.logged-in {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: rgba(16, 185, 129, 0.4);
+            color: #10b981;
+        }
+
+        /* === Nav Tabs === */
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 25px;
+            background: rgba(40, 42, 58, 0.9);
+            border-radius: 15px;
+            padding: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            flex-wrap: wrap;
+        }
+        .nav-tab {
+            flex: 1;
+            min-width: 0;
+            padding: 12px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 10px;
+            color: #a1a1aa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.95em;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .nav-tab.active {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3);
+        }
+        .nav-tab:hover:not(.active):not(.disabled) {
+            background: rgba(255, 255, 255, 0.15);
+            color: #e1e1e6;
+        }
+        .nav-tab.admin-only { display: none; }
+        .nav-tab.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            position: relative;
+        }
+        .nav-tab.disabled::after {
+            content: '開發中';
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #ef4444;
+            color: #fff;
+            font-size: 0.6em;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+
+        /* === Content Sections === */
+        .content-section {
+            display: none;
+            background: rgba(40, 42, 58, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .content-section.active { display: block; }
+        .section-title {
+            font-size: 1.5em;
+            color: #fbbf24;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        /* === Form Styles === */
+        .form-group { margin-bottom: 18px; }
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #fbbf24;
+            font-size: 0.95em;
+        }
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(30, 30, 46, 0.8);
+            color: #e1e1e6;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #00d4ff;
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+        }
+        .form-textarea { min-height: 100px; resize: vertical; font-family: inherit; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+
+        /* === Buttons === */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+        .btn-primary:hover:not(:disabled) { box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3); }
+        .btn-success { background: linear-gradient(135deg, #10b981, #059669); }
+        .btn-success:hover:not(:disabled) { box-shadow: 0 5px 15px rgba(16, 185, 129, 0.3); }
+        .btn-purple { background: linear-gradient(135deg, #a855f7, #9333ea); }
+        .btn-purple:hover:not(:disabled) { box-shadow: 0 5px 15px rgba(168, 85, 247, 0.3); }
+        .btn-block { width: 100%; justify-content: center; padding: 14px; font-size: 1.05em; }
+
+        /* === Voice Input === */
+        .voice-row { display: flex; gap: 10px; align-items: flex-start; }
+        .voice-row .form-textarea { flex: 1; }
+        .voice-btn {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.2);
+            border: 2px solid rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+            font-size: 1.3em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+        .voice-btn.recording {
+            background: rgba(239, 68, 68, 0.5);
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        }
+
+        /* === Quick Phrases === */
+        .quick-phrases {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .quick-phrase {
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            color: #a1a1aa;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.2s;
+        }
+        .quick-phrase:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+
+        /* === Attendance Table === */
+        .att-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .att-table th, .att-table td {
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+        .att-table th {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            font-weight: 600;
+        }
+        .att-table tr:hover { background: rgba(255, 255, 255, 0.05); }
+        .att-toggle {
+            display: inline-flex;
+            gap: 8px;
+        }
+        .att-toggle label {
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .att-toggle input { display: none; }
+        .att-toggle input[value="✓"]:checked + span {
+            background: rgba(16, 185, 129, 0.3);
+            border-color: #10b981;
+            color: #10b981;
+        }
+        .att-toggle input[value="△"]:checked + span {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+        .att-radio-label {
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #a1a1aa;
+            display: inline-block;
+        }
+        .att-radio-label.selected-present {
+            background: rgba(16, 185, 129, 0.3);
+            border-color: #10b981;
+            color: #10b981;
+        }
+        .att-radio-label.selected-absent {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+
+        /* === Dashboard Cards === */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.15));
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card.green {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.15));
+            border-color: rgba(16, 185, 129, 0.25);
+        }
+        .stat-card.red {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.15));
+            border-color: rgba(239, 68, 68, 0.25);
+        }
+        .stat-number { font-size: 2.2em; font-weight: bold; color: #3b82f6; margin-bottom: 5px; }
+        .stat-card.green .stat-number { color: #10b981; }
+        .stat-card.red .stat-number { color: #ef4444; }
+        .stat-label { color: #a1a1aa; font-size: 0.95em; }
+
+        .log-card {
+            background: rgba(30, 30, 46, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 12px;
+        }
+        .log-card h4 { color: #fbbf24; margin-bottom: 8px; }
+        .log-card p { color: #a1a1aa; margin-bottom: 4px; font-size: 0.95em; }
+        .log-card .teacher { color: #a5b4fc; }
+        .no-data {
+            text-align: center;
+            color: #71717a;
+            padding: 40px;
+            font-size: 1.1em;
+        }
+
+        /* === Report Section === */
+        .report-block {
+            background: rgba(30, 30, 46, 0.6);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .report-block h3 {
+            color: #a855f7;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+        .report-btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+
+        /* === Student Checkboxes === */
+        .student-checks {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 8px;
+            margin: 15px 0;
+        }
+        .student-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .student-check input { accent-color: #6366f1; }
+        .student-check:hover { background: rgba(255, 255, 255, 0.1); }
+
+        /* === Toast Notification === */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: #fff;
+            font-weight: 600;
+            z-index: 9999;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+            max-width: 350px;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { background: #059669; }
+        .toast.error { background: #dc2626; }
+        .toast.info { background: #2563eb; }
+
+        /* === Loading === */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #71717a;
+        }
+        .spinner {
+            display: inline-block;
+            width: 30px; height: 30px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 10px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* === Modal === */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: #2d2d44;
+            border-radius: 15px;
+            padding: 30px;
+            width: 90%;
+            max-width: 400px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal h3 { color: #fbbf24; margin-bottom: 15px; text-align: center; }
+
+        /* === Responsive === */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .header h1 { font-size: 1.4em; }
+            .admin-btn { position: static; margin-top: 10px; }
+            .nav-tabs { flex-wrap: wrap; }
+            .nav-tab { flex: none; width: calc(50% - 4px); font-size: 0.85em; padding: 10px 8px; }
+            .content-section { padding: 20px; }
+            .form-row, .form-row-3 { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .report-btns { flex-direction: column; }
+            .section-title { font-size: 1.3em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Header -->
+        <div class="header">
+            <h1 id="siteTitle">國姓國小進修部管理系統</h1>
+            <p>整合式教學管理與學生記錄平台</p>
+            <button class="admin-btn" id="adminBtn" onclick="toggleAdmin()">管理者登入</button>
+        </div>
+
+        <!-- Nav Tabs -->
+        <div class="nav-tabs" id="navTabs">
+            <button class="nav-tab admin-only" data-tab="dashboard" onclick="switchTab('dashboard', this)">總覽</button>
+            <button class="nav-tab active" data-tab="teaching-log" onclick="switchTab('teaching-log', this)">教學日誌</button>
+            <button class="nav-tab" data-tab="attendance" onclick="switchTab('attendance', this)">出缺席</button>
+            <button class="nav-tab admin-only" data-tab="reports" onclick="switchTab('reports', this)">報表下載</button>
+            <button class="nav-tab admin-only disabled" data-tab="grades">成績管理</button>
+        </div>
+
+        <!-- ===== Dashboard (管理者) ===== -->
+        <div id="dashboard" class="content-section">
+            <h2 class="section-title">今日概覽</h2>
+            <div id="dashboardDate" style="text-align:center;color:#71717a;margin-bottom:15px;"></div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="dashRate">--%</div>
+                    <div class="stat-label">出席率</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-number" id="dashPresent">--</div>
+                    <div class="stat-label">出席人數</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-number" id="dashAbsent">--</div>
+                    <div class="stat-label">請假人數</div>
+                </div>
+            </div>
+            <h3 style="color:#fbbf24;margin-bottom:15px;">今日教學日誌</h3>
+            <div id="dashLogs"><div class="no-data">載入中...</div></div>
+        </div>
+
+        <!-- ===== 教學日誌 ===== -->
+        <div id="teaching-log" class="content-section active">
+            <h2 class="section-title">教學日誌填報</h2>
+            <form id="logForm" onsubmit="submitLog(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">日期</label>
+                        <input type="date" class="form-input" id="logDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">星期</label>
+                        <input type="text" class="form-input" id="logWeekday" readonly>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">時間</label>
+                        <input type="text" class="form-input" id="logTime" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">課程</label>
+                        <select class="form-select" id="logCourse" required>
+                            <option value="">載入中...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">授課教師</label>
+                    <select class="form-select" id="logTeacher" required>
+                        <option value="">載入中...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">上課內容</label>
+                    <div class="voice-row">
+                        <textarea class="form-textarea" id="logContent" placeholder="請輸入上課內容..." required></textarea>
+                        <button type="button" class="voice-btn" id="voiceBtn" onclick="toggleVoice()" title="語音輸入">🎤</button>
+                    </div>
+                    <div class="quick-phrases" id="quickPhrases">
+                        <span class="quick-phrase" onclick="insertPhrase('課文講解與討論')">課文講解與討論</span>
+                        <span class="quick-phrase" onclick="insertPhrase('字詞練習')">字詞練習</span>
+                        <span class="quick-phrase" onclick="insertPhrase('習作指導')">習作指導</span>
+                        <span class="quick-phrase" onclick="insertPhrase('考試複習')">考試複習</span>
+                        <span class="quick-phrase" onclick="insertPhrase('影片教學')">影片教學</span>
+                        <span class="quick-phrase" onclick="insertPhrase('實作練習')">實作練習</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success btn-block" id="logSubmitBtn">提交教學日誌</button>
+            </form>
+        </div>
+
+        <!-- ===== 出缺席 ===== -->
+        <div id="attendance" class="content-section">
+            <h2 class="section-title">學生出缺席填報</h2>
+            <form id="attForm" onsubmit="submitAttendance(event)">
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label class="form-label">日期</label>
+                        <input type="date" class="form-input" id="attDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">星期</label>
+                        <input type="text" class="form-input" id="attWeekday" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">課程</label>
+                        <select class="form-select" id="attCourse" required>
+                            <option value="">載入中...</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:10px;">
+                    <button type="button" class="btn btn-primary" style="padding:6px 12px;font-size:0.85em;" onclick="setAllAttendance('✓')">全部出席</button>
+                    <button type="button" class="btn btn-purple" style="padding:6px 12px;font-size:0.85em;" onclick="setAllAttendance('△')">全部請假</button>
+                </div>
+                <table class="att-table" id="attTable">
+                    <thead><tr><th>姓名</th><th>出席狀態</th></tr></thead>
+                    <tbody id="attBody"><tr><td colspan="2" class="no-data">載入中...</td></tr></tbody>
+                </table>
+                <div style="margin-top:20px;">
+                    <button type="submit" class="btn btn-success btn-block" id="attSubmitBtn">提交出缺席記錄</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ===== 報表下載 (管理者) ===== -->
+        <div id="reports" class="content-section">
+            <h2 class="section-title">報表下載中心</h2>
+
+            <!-- 教學日誌 & 薪資報表 -->
+            <div class="report-block">
+                <h3>教學日誌 / 薪資報表</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">年份（民國）</label>
+                        <select class="form-select" id="rptYear"></select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">月份</label>
+                        <select class="form-select" id="rptMonth"></select>
+                    </div>
+                </div>
+                <div class="report-btns">
+                    <button class="btn btn-purple" onclick="downloadReport('export_log')" id="btnExportLog">教學日誌 XLS</button>
+                    <button class="btn btn-purple" onclick="downloadReport('export_salary')" id="btnExportSalary">薪資總表 XLS</button>
+                    <button class="btn btn-purple" onclick="downloadReport('export_payslip')" id="btnExportPayslip">薪資條 XLS</button>
+                </div>
+            </div>
+
+            <!-- 出缺席報表 -->
+            <div class="report-block">
+                <h3>出缺席報表</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">起始日期</label>
+                        <input type="date" class="form-input" id="attRptStart">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">結束日期</label>
+                        <input type="date" class="form-input" id="attRptEnd">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="queryStudents()" id="btnQueryStudents" style="margin-top:10px;">查詢學生</button>
+                <div id="studentCheckArea" style="display:none;margin-top:15px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <label class="form-label" style="margin:0;">勾選要列入報表的學生</label>
+                        <label class="student-check" style="background:none;padding:0;">
+                            <input type="checkbox" id="selectAllStudents" checked onchange="toggleAllStudents(this.checked)">
+                            <span>全選</span>
+                        </label>
+                    </div>
+                    <div class="student-checks" id="studentChecks"></div>
+                    <button class="btn btn-purple" onclick="downloadAttendanceReport()" id="btnExportAtt" style="margin-top:10px;">生成出缺席報表 XLS</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 成績管理 (預留) ===== -->
+        <div id="grades" class="content-section">
+            <h2 class="section-title">成績管理</h2>
+            <div class="no-data" style="padding:60px;">此功能開發中，敬請期待...</div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <h3>管理者登入</h3>
+            <div class="form-group">
+                <label class="form-label">請輸入管理者密碼</label>
+                <input type="password" class="form-input" id="adminPwd" placeholder="密碼" onkeydown="if(event.key==='Enter')doLogin()">
+            </div>
+            <div style="display:flex;gap:10px;">
+                <button class="btn btn-primary" style="flex:1;" onclick="doLogin()">登入</button>
+                <button class="btn" style="flex:1;background:rgba(255,255,255,0.1);" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+    // ===== Config =====
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxxaTfxJlZmqNBXc2gvTBb0rnUQpShm30Y8YFKfpHjIb8S5RLlrwzQz1xOIDLxf0W9j/exec';
+
+    let appConfig = {};
+    let appStaff = [];
+    let appStudents = [];
+    let appCourses = [];
+    let isAdmin = false;
+    let adminPwd = '';
+
+    // ===== Init =====
+    document.addEventListener('DOMContentLoaded', function() {
+        initDates();
+        loadConfig();
+        checkSession();
+    });
+
+    function initDates() {
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+
+        // Log form
+        document.getElementById('logDate').value = todayStr;
+        document.getElementById('logWeekday').value = weekdays[today.getDay()];
+
+        // Attendance form
+        document.getElementById('attDate').value = todayStr;
+        document.getElementById('attWeekday').value = weekdays[today.getDay()];
+
+        // Date change handlers
+        document.getElementById('logDate').addEventListener('change', function() {
+            var d = new Date(this.value + 'T00:00:00');
+            document.getElementById('logWeekday').value = weekdays[d.getDay()];
+            autoSelectCourse('log', weekdays[d.getDay()]);
+        });
+        document.getElementById('attDate').addEventListener('change', function() {
+            var d = new Date(this.value + 'T00:00:00');
+            document.getElementById('attWeekday').value = weekdays[d.getDay()];
+            autoSelectCourse('att', weekdays[d.getDay()]);
+        });
+
+        // Report year/month
+        var rocYear = today.getFullYear() - 1911;
+        var rptYearSel = document.getElementById('rptYear');
+        for (var y = rocYear - 1; y <= rocYear + 1; y++) {
+            var opt = document.createElement('option');
+            opt.value = y; opt.textContent = y + '年';
+            if (y === rocYear) opt.selected = true;
+            rptYearSel.appendChild(opt);
+        }
+        var rptMonthSel = document.getElementById('rptMonth');
+        for (var m = 1; m <= 12; m++) {
+            var opt = document.createElement('option');
+            opt.value = m; opt.textContent = m + '月';
+            if (m === today.getMonth() + 1) opt.selected = true;
+            rptMonthSel.appendChild(opt);
+        }
+
+        // Attendance report dates default: this month
+        var firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        document.getElementById('attRptStart').value = firstDay.toISOString().split('T')[0];
+        document.getElementById('attRptEnd').value = todayStr;
+    }
+
+    // ===== Load Config from GAS =====
+    function loadConfig() {
+        fetch(API_URL + '?action=load_config')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) { showToast('載入設定失敗: ' + data.error, 'error'); return; }
+                appConfig = data.config;
+                appStaff = data.staff;
+                appStudents = data.students;
+                appCourses = data.courses;
+
+                // Update title
+                if (appConfig['學校名稱']) {
+                    document.getElementById('siteTitle').textContent = appConfig['學校名稱'] + appConfig['進修部名稱'] + '管理系統';
+                }
+                if (appConfig['上課時間']) {
+                    document.getElementById('logTime').value = appConfig['上課時間'];
+                }
+
+                populateCourses();
+                populateTeachers();
+                populateStudents();
+
+                // Auto-select course based on today
+                var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+                var todayWeekday = weekdays[new Date().getDay()];
+                autoSelectCourse('log', todayWeekday);
+                autoSelectCourse('att', todayWeekday);
+            })
+            .catch(function(err) {
+                showToast('無法連線到伺服器', 'error');
+                console.error(err);
+            });
+    }
+
+    function populateCourses() {
+        var logSel = document.getElementById('logCourse');
+        var attSel = document.getElementById('attCourse');
+        logSel.innerHTML = '<option value="">-- 請選擇課程 --</option>';
+        attSel.innerHTML = '<option value="">-- 請選擇課程 --</option>';
+        appCourses.forEach(function(c) {
+            var opt1 = document.createElement('option');
+            opt1.value = c.name; opt1.textContent = c.name + '（' + c.weekday + '）';
+            opt1.dataset.weekday = c.weekday;
+            opt1.dataset.teacher = c.teacher;
+            logSel.appendChild(opt1);
+
+            var opt2 = opt1.cloneNode(true);
+            attSel.appendChild(opt2);
+        });
+
+        // Course change -> auto select teacher
+        logSel.addEventListener('change', function() {
+            var opt = this.options[this.selectedIndex];
+            if (opt.dataset.teacher) {
+                document.getElementById('logTeacher').value = opt.dataset.teacher;
+            }
+        });
+    }
+
+    function populateTeachers() {
+        var sel = document.getElementById('logTeacher');
+        sel.innerHTML = '<option value="">-- 請選擇教師 --</option>';
+        appStaff.forEach(function(s) {
+            var opt = document.createElement('option');
+            opt.value = s.name; opt.textContent = s.name + '（' + s.role + '）';
+            sel.appendChild(opt);
+        });
+    }
+
+    function populateStudents() {
+        var tbody = document.getElementById('attBody');
+        if (appStudents.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" class="no-data">無學生資料</td></tr>';
+            return;
+        }
+        tbody.innerHTML = '';
+        appStudents.forEach(function(s, idx) {
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td style="font-weight:600;">' + s.name + '</td>' +
+                '<td>' +
+                '<div class="att-toggle">' +
+                '<label class="att-radio-label" onclick="selectAtt(this, ' + idx + ', \'✓\')">' +
+                '✓ 出席</label> ' +
+                '<label class="att-radio-label" onclick="selectAtt(this, ' + idx + ', \'△\')">' +
+                '△ 請假</label>' +
+                '</div>' +
+                '<input type="hidden" name="att_' + idx + '" data-student="' + s.name + '" value="">' +
+                '</td>';
+            tbody.appendChild(tr);
+        });
+    }
+
+    function autoSelectCourse(prefix, weekday) {
+        var selId = prefix === 'log' ? 'logCourse' : 'attCourse';
+        var sel = document.getElementById(selId);
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].dataset && sel.options[i].dataset.weekday === weekday) {
+                sel.selectedIndex = i;
+                sel.dispatchEvent(new Event('change'));
+                break;
+            }
+        }
+    }
+
+    // ===== Attendance Toggle =====
+    function selectAtt(label, idx, value) {
+        var hidden = document.querySelector('input[name="att_' + idx + '"]');
+        var parent = label.parentElement;
+        var labels = parent.querySelectorAll('.att-radio-label');
+
+        // Toggle off if same
+        if (hidden.value === value) {
+            hidden.value = '';
+            labels.forEach(function(l) { l.className = 'att-radio-label'; });
+            return;
+        }
+
+        hidden.value = value;
+        labels.forEach(function(l) { l.className = 'att-radio-label'; });
+        if (value === '✓') label.classList.add('selected-present');
+        else if (value === '△') label.classList.add('selected-absent');
+    }
+
+    function setAllAttendance(value) {
+        appStudents.forEach(function(s, idx) {
+            var hidden = document.querySelector('input[name="att_' + idx + '"]');
+            hidden.value = value;
+            var labels = hidden.parentElement.querySelectorAll('.att-radio-label');
+            labels.forEach(function(l) { l.className = 'att-radio-label'; });
+            if (value === '✓') labels[0].classList.add('selected-present');
+            else if (value === '△') labels[1].classList.add('selected-absent');
+        });
+    }
+
+    // ===== Submit Log =====
+    function submitLog(e) {
+        e.preventDefault();
+        var btn = document.getElementById('logSubmitBtn');
+        btn.disabled = true; btn.textContent = '提交中...';
+
+        var weekday = document.getElementById('logWeekday').value;
+        var payload = {
+            action: 'submit_log',
+            date: document.getElementById('logDate').value,
+            weekday: weekday,
+            time: document.getElementById('logTime').value,
+            course: document.getElementById('logCourse').value,
+            content: document.getElementById('logContent').value,
+            teacher: document.getElementById('logTeacher').value
+        };
+
+        fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false; btn.textContent = '提交教學日誌';
+            if (data.success) {
+                showToast('教學日誌提交成功！', 'success');
+                document.getElementById('logContent').value = '';
+            } else {
+                showToast('提交失敗: ' + data.error, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false; btn.textContent = '提交教學日誌';
+            showToast('提交失敗，請檢查網路連線', 'error');
+        });
+    }
+
+    // ===== Submit Attendance =====
+    function submitAttendance(e) {
+        e.preventDefault();
+        var btn = document.getElementById('attSubmitBtn');
+        btn.disabled = true; btn.textContent = '提交中...';
+
+        var attendance = {};
+        appStudents.forEach(function(s, idx) {
+            var val = document.querySelector('input[name="att_' + idx + '"]').value;
+            if (val) attendance[s.name] = val;
+        });
+
+        if (Object.keys(attendance).length === 0) {
+            showToast('請至少勾選一位學生的出缺席', 'error');
+            btn.disabled = false; btn.textContent = '提交出缺席記錄';
+            return;
+        }
+
+        var weekday = document.getElementById('attWeekday').value;
+        var payload = {
+            action: 'submit_attendance',
+            date: document.getElementById('attDate').value,
+            weekday: weekday,
+            course: document.getElementById('attCourse').value,
+            attendance: attendance
+        };
+
+        fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false; btn.textContent = '提交出缺席記錄';
+            if (data.success) {
+                showToast('出缺席記錄提交成功！', 'success');
+                // Reset
+                appStudents.forEach(function(s, idx) {
+                    var hidden = document.querySelector('input[name="att_' + idx + '"]');
+                    hidden.value = '';
+                    var labels = hidden.parentElement.querySelectorAll('.att-radio-label');
+                    labels.forEach(function(l) { l.className = 'att-radio-label'; });
+                });
+            } else {
+                showToast('提交失敗: ' + data.error, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false; btn.textContent = '提交出缺席記錄';
+            showToast('提交失敗，請檢查網路連線', 'error');
+        });
+    }
+
+    // ===== Voice Input =====
+    var recognition = null;
+    var isRecording = false;
+
+    function toggleVoice() {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            showToast('您的瀏覽器不支援語音輸入', 'error');
+            return;
+        }
+        if (isRecording) {
+            recognition.stop();
+            return;
+        }
+
+        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.lang = 'zh-TW';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onstart = function() {
+            isRecording = true;
+            document.getElementById('voiceBtn').classList.add('recording');
+        };
+        recognition.onend = function() {
+            isRecording = false;
+            document.getElementById('voiceBtn').classList.remove('recording');
+        };
+        recognition.onresult = function(event) {
+            var transcript = '';
+            for (var i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            document.getElementById('logContent').value += transcript;
+        };
+        recognition.onerror = function(event) {
+            isRecording = false;
+            document.getElementById('voiceBtn').classList.remove('recording');
+            if (event.error !== 'no-speech') {
+                showToast('語音辨識錯誤: ' + event.error, 'error');
+            }
+        };
+        recognition.start();
+    }
+
+    function insertPhrase(text) {
+        var ta = document.getElementById('logContent');
+        var pos = ta.selectionStart;
+        var before = ta.value.substring(0, pos);
+        var after = ta.value.substring(pos);
+        ta.value = before + text + after;
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = pos + text.length;
+    }
+
+    // ===== Admin Login =====
+    function toggleAdmin() {
+        if (isAdmin) {
+            logoutAdmin();
+        } else {
+            document.getElementById('loginModal').classList.add('show');
+            document.getElementById('adminPwd').focus();
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('loginModal').classList.remove('show');
+        document.getElementById('adminPwd').value = '';
+    }
+
+    function doLogin() {
+        var pwd = document.getElementById('adminPwd').value;
+        if (!pwd) return;
+
+        fetch(API_URL + '?action=verify_admin&pwd=' + encodeURIComponent(pwd))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    adminPwd = pwd;
+                    sessionStorage.setItem('adminPwd', pwd);
+                    isAdmin = true;
+                    closeModal();
+                    applyAdminMode();
+                    showToast('管理者登入成功', 'success');
+                    loadDashboard();
+                } else {
+                    showToast('密碼錯誤', 'error');
+                }
+            })
+            .catch(function() {
+                showToast('驗證失敗，請檢查網路', 'error');
+            });
+    }
+
+    function logoutAdmin() {
+        isAdmin = false;
+        adminPwd = '';
+        sessionStorage.removeItem('adminPwd');
+        applyTeacherMode();
+        showToast('已登出管理者模式', 'info');
+    }
+
+    function checkSession() {
+        var savedPwd = sessionStorage.getItem('adminPwd');
+        if (savedPwd) {
+            fetch(API_URL + '?action=verify_admin&pwd=' + encodeURIComponent(savedPwd))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        adminPwd = savedPwd;
+                        isAdmin = true;
+                        applyAdminMode();
+                        loadDashboard();
+                    } else {
+                        sessionStorage.removeItem('adminPwd');
+                    }
+                });
+        }
+    }
+
+    function applyAdminMode() {
+        document.querySelectorAll('.nav-tab.admin-only').forEach(function(t) {
+            t.style.display = '';
+        });
+        document.getElementById('adminBtn').textContent = '登出管理者';
+        document.getElementById('adminBtn').classList.add('logged-in');
+    }
+
+    function applyTeacherMode() {
+        document.querySelectorAll('.nav-tab.admin-only').forEach(function(t) {
+            t.style.display = 'none';
+        });
+        document.getElementById('adminBtn').textContent = '管理者登入';
+        document.getElementById('adminBtn').classList.remove('logged-in');
+        // Switch to teaching-log if currently on admin tab
+        var activeTab = document.querySelector('.nav-tab.active');
+        if (activeTab && activeTab.classList.contains('admin-only')) {
+            switchTab('teaching-log', document.querySelector('.nav-tab[data-tab="teaching-log"]'));
+        }
+    }
+
+    // ===== Tab Switching =====
+    function switchTab(tabName, btn) {
+        // Don't switch to disabled tabs
+        if (btn && btn.classList.contains('disabled')) return;
+
+        document.querySelectorAll('.content-section').forEach(function(s) { s.classList.remove('active'); });
+        document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.getElementById(tabName).classList.add('active');
+        if (btn) btn.classList.add('active');
+    }
+
+    // ===== Dashboard =====
+    function loadDashboard() {
+        if (!isAdmin) return;
+        fetch(API_URL + '?action=get_dashboard&pwd=' + encodeURIComponent(adminPwd))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) return;
+
+                // Date
+                var d = new Date(data.date);
+                var rocYear = d.getFullYear() - 1911;
+                var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+                document.getElementById('dashboardDate').textContent =
+                    rocYear + '/' + (d.getMonth() + 1) + '/' + d.getDate() + ' 星期' + weekdays[d.getDay()];
+
+                // Stats
+                var att = data.attendance;
+                document.getElementById('dashRate').textContent = att.hasData ? att.rate + '%' : '--%';
+                document.getElementById('dashPresent').textContent = att.hasData ? att.presentCount + ' / ' + att.totalStudents : '--';
+                document.getElementById('dashAbsent').textContent = att.hasData ? att.absentCount : '--';
+
+                // Logs
+                var logsDiv = document.getElementById('dashLogs');
+                if (data.todayLogs.length === 0) {
+                    logsDiv.innerHTML = '<div class="no-data">今日尚無記錄</div>';
+                } else {
+                    logsDiv.innerHTML = '';
+                    data.todayLogs.forEach(function(log) {
+                        logsDiv.innerHTML +=
+                            '<div class="log-card">' +
+                            '<h4>' + log.course + '</h4>' +
+                            '<p class="teacher">授課教師：' + log.teacher + '</p>' +
+                            '<p>內容：' + log.content + '</p>' +
+                            '<p>時間：' + log.time + '</p>' +
+                            '</div>';
+                    });
+                }
+            });
+    }
+
+    // ===== Report Downloads =====
+    function downloadReport(action) {
+        var year = document.getElementById('rptYear').value;
+        var month = document.getElementById('rptMonth').value;
+        var btnId = action === 'export_log' ? 'btnExportLog' :
+                    action === 'export_salary' ? 'btnExportSalary' : 'btnExportPayslip';
+        var btn = document.getElementById(btnId);
+        var origText = btn.textContent;
+        btn.disabled = true; btn.textContent = '處理中...';
+
+        var url = API_URL + '?action=' + action + '&year=' + year + '&month=' + month +
+                  '&pwd=' + encodeURIComponent(adminPwd);
+
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = origText;
+                if (data.success) {
+                    window.open(data.downloadUrl, '_blank');
+                    showToast(data.fileName + ' 已生成', 'success');
+                } else {
+                    showToast('生成失敗: ' + data.error, 'error');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false; btn.textContent = origText;
+                showToast('生成失敗，請檢查網路', 'error');
+            });
+    }
+
+    function queryStudents() {
+        var start = document.getElementById('attRptStart').value;
+        var end = document.getElementById('attRptEnd').value;
+        if (!start || !end) { showToast('請選擇起始和結束日期', 'error'); return; }
+
+        var btn = document.getElementById('btnQueryStudents');
+        btn.disabled = true; btn.textContent = '查詢中...';
+
+        var url = API_URL + '?action=get_students_in_range&start=' + start + '&end=' + end +
+                  '&pwd=' + encodeURIComponent(adminPwd);
+
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = '查詢學生';
+                if (!data.success) { showToast(data.error, 'error'); return; }
+
+                var area = document.getElementById('studentCheckArea');
+                var checks = document.getElementById('studentChecks');
+                checks.innerHTML = '';
+                data.students.forEach(function(s) {
+                    var label = document.createElement('label');
+                    label.className = 'student-check';
+                    label.innerHTML = '<input type="checkbox" value="' + s.name + '" checked> ' + s.name +
+                        (s.hasRecord ? '' : ' <span style="color:#71717a;font-size:0.8em;">(無記錄)</span>');
+                    checks.appendChild(label);
+                });
+                area.style.display = 'block';
+            })
+            .catch(function() {
+                btn.disabled = false; btn.textContent = '查詢學生';
+                showToast('查詢失敗', 'error');
+            });
+    }
+
+    function toggleAllStudents(checked) {
+        document.querySelectorAll('#studentChecks input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = checked;
+        });
+    }
+
+    function downloadAttendanceReport() {
+        var start = document.getElementById('attRptStart').value;
+        var end = document.getElementById('attRptEnd').value;
+        var students = [];
+        document.querySelectorAll('#studentChecks input[type="checkbox"]:checked').forEach(function(cb) {
+            students.push(cb.value);
+        });
+        if (students.length === 0) { showToast('請至少勾選一位學生', 'error'); return; }
+
+        var btn = document.getElementById('btnExportAtt');
+        btn.disabled = true; btn.textContent = '生成中...';
+
+        var url = API_URL + '?action=export_attendance&start=' + start + '&end=' + end +
+                  '&students=' + encodeURIComponent(students.join(',')) +
+                  '&pwd=' + encodeURIComponent(adminPwd);
+
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = '生成出缺席報表 XLS';
+                if (data.success) {
+                    window.open(data.downloadUrl, '_blank');
+                    showToast(data.fileName + ' 已生成', 'success');
+                } else {
+                    showToast('生成失敗: ' + data.error, 'error');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false; btn.textContent = '生成出缺席報表 XLS';
+                showToast('生成失敗', 'error');
+            });
+    }
+
+    // ===== Toast =====
+    function showToast(msg, type) {
+        var toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.className = 'toast ' + (type || 'info') + ' show';
+        setTimeout(function() { toast.classList.remove('show'); }, 3000);
+    }
+    </script>
+</body>
+</html>
