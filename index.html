@@ -91,6 +91,7 @@
             color: #e1e1e6;
         }
         .nav-tab.admin-only { display: none; }
+        .nav-tabs.admin-mode .nav-tab.admin-only { display: block; }
         .nav-tab.disabled {
             opacity: 0.4;
             cursor: not-allowed;
@@ -1044,17 +1045,13 @@
     }
 
     function applyAdminMode() {
-        document.querySelectorAll('.nav-tab.admin-only').forEach(function(t) {
-            t.style.display = '';
-        });
+        document.getElementById('navTabs').classList.add('admin-mode');
         document.getElementById('adminBtn').textContent = '登出管理者';
         document.getElementById('adminBtn').classList.add('logged-in');
     }
 
     function applyTeacherMode() {
-        document.querySelectorAll('.nav-tab.admin-only').forEach(function(t) {
-            t.style.display = 'none';
-        });
+        document.getElementById('navTabs').classList.remove('admin-mode');
         document.getElementById('adminBtn').textContent = '管理者登入';
         document.getElementById('adminBtn').classList.remove('logged-in');
         // Switch to teaching-log if currently on admin tab
