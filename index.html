@@ -842,7 +842,6 @@
 
         var weekday = document.getElementById('logWeekday').value;
         var payload = {
-            action: 'submit_log',
             date: document.getElementById('logDate').value,
             weekday: weekday,
             time: document.getElementById('logTime').value,
@@ -851,11 +850,8 @@
             teacher: document.getElementById('logTeacher').value
         };
 
-        fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
+        var url = API_URL + '?action=submit_log&data=' + encodeURIComponent(JSON.stringify(payload));
+        fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(data) {
             btn.disabled = false; btn.textContent = '提交教學日誌';
@@ -899,11 +895,8 @@
             attendance: attendance
         };
 
-        fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
+        var url = API_URL + '?action=submit_attendance&data=' + encodeURIComponent(JSON.stringify(payload));
+        fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(data) {
             btn.disabled = false; btn.textContent = '提交出缺席記錄';

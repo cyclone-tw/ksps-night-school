@@ -164,6 +164,14 @@ function doGet(e) {
           return exportAttendance(e.parameter.start, e.parameter.end, e.parameter.students);
         });
         break;
+      case 'submit_log':
+        var logData = JSON.parse(decodeURIComponent(e.parameter.data));
+        result = submitLog(logData);
+        break;
+      case 'submit_attendance':
+        var attData = JSON.parse(decodeURIComponent(e.parameter.data));
+        result = submitAttendance(attData);
+        break;
       default:
         result = { success: false, error: '未知的 action: ' + action };
     }
