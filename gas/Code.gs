@@ -9,6 +9,22 @@ function getSheet(name) {
   return getSpreadsheet().getSheetByName(name);
 }
 
+function moveToReportFolder(fileId) {
+  var settings = getSheet('系統設定').getDataRange().getValues();
+  var folderId = '';
+  for (var i = 0; i < settings.length; i++) {
+    if (settings[i][0] === '報表資料夾ID') {
+      folderId = String(settings[i][1]).trim();
+      break;
+    }
+  }
+  if (folderId) {
+    var file = DriveApp.getFileById(fileId);
+    DriveApp.getFolderById(folderId).addFile(file);
+    DriveApp.getRootFolder().removeFile(file);
+  }
+}
+
 // ===== 初始化（執行一次即可） =====
 function initializeSheets() {
   var ss = getSpreadsheet();
@@ -30,14 +46,15 @@ function initializeSheets() {
   // 1. 系統設定
   var s1 = ss.getSheetByName('系統設定');
   s1.clear();
-  s1.getRange(1, 1, 7, 2).setValues([
+  s1.getRange(1, 1, 8, 2).setValues([
     ['學校名稱', '國姓國民小學'],
     ['進修部名稱', '進修部'],
     ['管理者密碼', '***REDACTED_PASSWORD***'],
     ['鐘點費單價', 405],
     ['每日節數', 3],
     ['上課時間', '19:00~21:00'],
-    ['縣市名稱', '南投縣']
+    ['縣市名稱', '南投縣'],
+    ['報表資料夾ID', '***REDACTED_FOLDER_ID***']
   ]);
 
   // 2. 人員名冊
@@ -626,6 +643,7 @@ function exportTeachingLog(yearStr, monthStr) {
   ws.setRowHeight(signRow, 60);
 
   var fileId = newSS.getId();
+  moveToReportFolder(fileId);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
@@ -773,6 +791,7 @@ function exportSalary(yearStr, monthStr) {
   ws.getRange(signRow, 8).setValue('校長').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
 
   var fileId = newSS.getId();
+  moveToReportFolder(fileId);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
@@ -932,6 +951,7 @@ function exportPayslip(yearStr, monthStr) {
   }
 
   var fileId = newSS.getId();
+  moveToReportFolder(fileId);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
@@ -1075,6 +1095,7 @@ function exportAttendance(startStr, endStr, studentsStr) {
   }
 
   var fileId = newSS.getId();
+  moveToReportFolder(fileId);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
