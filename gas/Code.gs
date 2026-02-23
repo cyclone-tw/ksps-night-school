@@ -11,9 +11,25 @@ function getSheet(name) {
 
 var DEFAULT_REPORT_FOLDER_ID = '***REDACTED_FOLDER_ID***';
 
-function moveToReportFolder(fileId) {
+// Web App 匿名模式無法使用 Drive API，改用佇列 + 觸發器
+function queueFileMove(fileId) {
+  var props = PropertiesService.getScriptProperties();
+  var queue = props.getProperty('moveQueue');
+  var list = queue ? JSON.parse(queue) : [];
+  list.push(fileId);
+  props.setProperty('moveQueue', JSON.stringify(list));
+}
+
+// 由時間觸發器執行（每分鐘），在 owner 權限下移動檔案
+function processMoveQueue() {
+  var props = PropertiesService.getScriptProperties();
+  var queue = props.getProperty('moveQueue');
+  if (!queue) return;
+  var list = JSON.parse(queue);
+  if (list.length === 0) return;
+
+  var folderId = DEFAULT_REPORT_FOLDER_ID;
   try {
-    var folderId = DEFAULT_REPORT_FOLDER_ID;
     var settings = getSheet('系統設定').getDataRange().getValues();
     for (var i = 0; i < settings.length; i++) {
       var key = String(settings[i][0]).trim().replace(/\s/g, '');
@@ -23,12 +39,35 @@ function moveToReportFolder(fileId) {
         break;
       }
     }
-    var file = DriveApp.getFileById(fileId);
-    file.moveTo(DriveApp.getFolderById(folderId));
-    return '';
-  } catch (e) {
-    return e.message;
+  } catch (e) {}
+
+  var folder = DriveApp.getFolderById(folderId);
+  var remaining = [];
+  for (var i = 0; i < list.length; i++) {
+    try {
+      var file = DriveApp.getFileById(list[i]);
+      file.moveTo(folder);
+    } catch (e) {
+      remaining.push(list[i]);
+    }
   }
+  props.setProperty('moveQueue', JSON.stringify(remaining));
+}
+
+// 在編輯器執行一次，設定每分鐘觸發器
+function setupMoveTrigger() {
+  // 先清除舊的
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'processMoveQueue') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger('processMoveQueue')
+    .timeBased()
+    .everyMinutes(1)
+    .create();
+  Logger.log('觸發器已設定：每分鐘執行 processMoveQueue');
 }
 
 // ===== 初始化（執行一次即可） =====
@@ -649,14 +688,13 @@ function exportTeachingLog(yearStr, monthStr) {
   ws.setRowHeight(signRow, 60);
 
   var fileId = newSS.getId();
-  var moveError = moveToReportFolder(fileId);
+  queueFileMove(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
     success: true,
     fileName: fileName,
     sheetUrl: sheetUrl,
-    moveError: moveError,
     recordCount: records.length
   };
 }
@@ -798,7 +836,7 @@ function exportSalary(yearStr, monthStr) {
   ws.getRange(signRow, 8).setValue('校長').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
 
   var fileId = newSS.getId();
-  var moveError = moveToReportFolder(fileId);
+  queueFileMove(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
@@ -958,7 +996,7 @@ function exportPayslip(yearStr, monthStr) {
   }
 
   var fileId = newSS.getId();
-  var moveError = moveToReportFolder(fileId);
+  queueFileMove(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
@@ -1102,7 +1140,7 @@ function exportAttendance(startStr, endStr, studentsStr) {
   }
 
   var fileId = newSS.getId();
-  var moveError = moveToReportFolder(fileId);
+  queueFileMove(fileId);
   var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
 
   return {
