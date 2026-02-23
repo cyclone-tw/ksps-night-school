@@ -1213,7 +1213,12 @@
             .then(function(data) {
                 btn.disabled = false; btn.textContent = origText;
                 if (data.success) {
-                    window.open(data.downloadUrl, '_blank');
+                    var a = document.createElement('a');
+                    a.href = data.downloadUrl;
+                    a.download = data.fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
                     showToast(data.fileName + ' 已生成', 'success');
                 } else {
                     showToast('生成失敗: ' + data.error, 'error');
@@ -1287,7 +1292,12 @@
             .then(function(data) {
                 btn.disabled = false; btn.textContent = '生成出缺席報表 XLS';
                 if (data.success) {
-                    window.open(data.downloadUrl, '_blank');
+                    var a = document.createElement('a');
+                    a.href = data.downloadUrl;
+                    a.download = data.fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
                     showToast(data.fileName + ' 已生成', 'success');
                 } else {
                     showToast('生成失敗: ' + data.error, 'error');

@@ -626,6 +626,7 @@ function exportTeachingLog(yearStr, monthStr) {
   ws.setRowHeight(signRow, 60);
 
   var fileId = newSS.getId();
+  DriveApp.getFileById(fileId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
@@ -773,6 +774,7 @@ function exportSalary(yearStr, monthStr) {
   ws.getRange(signRow, 8).setValue('校長').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
 
   var fileId = newSS.getId();
+  DriveApp.getFileById(fileId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
@@ -932,6 +934,7 @@ function exportPayslip(yearStr, monthStr) {
   }
 
   var fileId = newSS.getId();
+  DriveApp.getFileById(fileId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
@@ -1075,6 +1078,7 @@ function exportAttendance(startStr, endStr, studentsStr) {
   }
 
   var fileId = newSS.getId();
+  DriveApp.getFileById(fileId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   var downloadUrl = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
 
   return {
