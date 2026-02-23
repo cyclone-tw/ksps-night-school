@@ -9,6 +9,114 @@ function getSheet(name) {
   return getSpreadsheet().getSheetByName(name);
 }
 
+// ===== 初始化（執行一次即可） =====
+function initializeSheets() {
+  var ss = getSpreadsheet();
+
+  // 建立分頁（如果不存在）
+  var tabs = ['系統設定', '人員名冊', '學生名冊', '課程設定', '教學日誌', '出缺席記錄', '成績設定', '成績記錄'];
+  tabs.forEach(function(name) {
+    if (!ss.getSheetByName(name)) {
+      ss.insertSheet(name);
+    }
+  });
+
+  // 刪除預設的 Sheet1（如果存在且不在我們的列表中）
+  var defaultSheet = ss.getSheetByName('工作表1');
+  if (defaultSheet && ss.getSheets().length > 1) {
+    ss.deleteSheet(defaultSheet);
+  }
+
+  // 1. 系統設定
+  var s1 = ss.getSheetByName('系統設定');
+  s1.clear();
+  s1.getRange(1, 1, 7, 2).setValues([
+    ['學校名稱', '國姓國民小學'],
+    ['進修部名稱', '進修部'],
+    ['管理者密碼', '***REDACTED_PASSWORD***'],
+    ['鐘點費單價', 405],
+    ['每日節數', 3],
+    ['上課時間', '19:00~21:00'],
+    ['縣市名稱', '南投縣']
+  ]);
+
+  // 2. 人員名冊
+  var s2 = ss.getSheetByName('人員名冊');
+  s2.clear();
+  s2.getRange(1, 1, 6, 6).setValues([
+    ['姓名', '角色', '狀態', '額外費用名稱', '額外費用金額', '備註'],
+    ['林思遠', '校長', '在職', '校長兼職費', 2333, '三班以下3500元的三分之二'],
+    ['吳怡萱', '導師', '在職', '導師費', 4000, '比照國民小學導師費標準'],
+    ['余曜男', '教師', '在職', '', '', ''],
+    ['劉政勳', '教師', '在職', '', '', ''],
+    ['康雲昇', '教師', '在職', '', '', '']
+  ]);
+
+  // 3. 學生名冊
+  var s3 = ss.getSheetByName('學生名冊');
+  s3.clear();
+  s3.getRange(1, 1, 12, 2).setValues([
+    ['姓名', '狀態'],
+    ['阮氏彫', '在學'],
+    ['阮紅妮', '在學'],
+    ['阮玄莊', '在學'],
+    ['范宥嫺', '在學'],
+    ['黎美香', '在學'],
+    ['馬銨妤', '在學'],
+    ['陳錦江', '在學'],
+    ['黎氏銀', '在學'],
+    ['范氏燕萍', '在學'],
+    ['陳氏錦秀', '在學'],
+    ['阮氏雪梅', '在學']
+  ]);
+
+  // 4. 課程設定
+  var s4 = ss.getSheetByName('課程設定');
+  s4.clear();
+  s4.getRange(1, 1, 5, 3).setValues([
+    ['課程名稱', '星期', '授課教師'],
+    ['國語與彈性', '一', '吳怡萱'],
+    ['社會生活與彈性', '二', '劉政勳'],
+    ['國語與英文', '三', '康雲昇'],
+    ['數學與科學', '四', '余曜男']
+  ]);
+
+  // 5. 教學日誌
+  var s5 = ss.getSheetByName('教學日誌');
+  s5.clear();
+  s5.getRange(1, 1, 1, 6).setValues([
+    ['日期', '星期', '時間', '課程', '上課內容', '授課教師']
+  ]);
+
+  // 6. 出缺席記錄
+  var s6 = ss.getSheetByName('出缺席記錄');
+  s6.clear();
+  s6.getRange(1, 1, 1, 3).setValues([
+    ['日期', '星期', '課程']
+  ]);
+
+  // 7. 成績設定
+  var s7 = ss.getSheetByName('成績設定');
+  s7.clear();
+  s7.getRange(1, 1, 6, 2).setValues([
+    ['成績科目名稱', '類型'],
+    ['國語', '學科'],
+    ['數學', '學科'],
+    ['社會', '學科'],
+    ['自然', '學科'],
+    ['英文', '學科']
+  ]);
+
+  // 8. 成績記錄
+  var s8 = ss.getSheetByName('成績記錄');
+  s8.clear();
+  s8.getRange(1, 1, 1, 7).setValues([
+    ['學年度', '學期', '學生姓名', '科目', '平時成績', '考試成績', '學期成績']
+  ]);
+
+  return '初始化完成！共建立 ' + tabs.length + ' 個分頁。';
+}
+
 // ===== Web App 入口 =====
 function doGet(e) {
   var action = e.parameter.action;
@@ -16,6 +124,9 @@ function doGet(e) {
 
   try {
     switch (action) {
+      case 'init':
+        result = { success: true, message: initializeSheets() };
+        break;
       case 'load_config':
         result = loadConfig();
         break;
