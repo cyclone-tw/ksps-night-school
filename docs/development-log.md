@@ -102,7 +102,7 @@
 
 ---
 
-## 2026-09-22 穩定化 + 報表批次寫入（#1）
+## 2026-09-22 穩定化 + 報表批次寫入（#1／PR #2）
 
 ### A 穩定
 - 前端新增 `apiGet` / `apiSubmit`：JSON 解析失敗／404 顯示多帳號提示，並指數退避重試
@@ -114,3 +114,27 @@
 - `getSheetValues_` 取代多數 `getDataRange()` 全表掃描
 - 教學日誌／薪資總表／出缺席報表改批次 `setValues`
 - 設定鍵 `trim`，修正「報表資料夾ID」空白鍵名造成的讀取不一致
+
+### 後續修正（#3／PR #4 → GAS v30）
+- Apps Script `Sheet.getRange(row, column, numRows, numColumns)` 誤傳 endRow，報表空白列多畫框線；改回正確 numRows／numColumns
+- `loadAdminConfig.extraFeeAmount` 回復數字 `0` fallback
+
+---
+
+## 2026-09-22 load_config 冷啟動加速（#5／PR #6 → GAS v31）
+
+### 現象
+- 首屏載入課程／教師／科目常超過 20 秒
+- 實測：`load_config` **第一次**常約 **40 秒**回 HTML 404，**第二次**約 **2.5 秒**成功
+- 根因偏 **GAS Web App 冷啟動／echo 偶發 404**，不是 Sheet 資料量大；舊前端長等待＋重試會把體感再拉長
+
+### 解法
+- **前端**：`sessionStorage` key `ksps_config_cache_v1` 先填下拉再背景刷新；單次請求約 12 秒逾時（`AbortController`）；`load_config` 快速重試（約 400ms／800ms）
+- **GAS**：同一次 execution memoize `SpreadsheetApp.openById`；`load_config` 結果進 Script Cache（key `load_config_v1`，TTL 120 秒）
+- 匿名填報（`ANYONE_ANONYMOUS`）與 deployment URL **不變**
+
+### 驗證／收尾（2026-09-22）
+- 使用者確認載入有變快；有 session 快取時下拉可在約 0.2 秒出現
+- `main` 收斂至含 #6 的 tip；線上 GAS **v31**
+- Wiki 復盤：`cyclone-wiki` → `Core/_inbox/coding-sessions/macbook-cursor/2026-09-22-ksps-night-school-gas-coldstart-stabilize.md`
+- **仍須人工**：部署帳號把 Sheet／報表資料夾分享給 `ksps.ntct.edu.tw`；多 Google 帳號時若 404，改無痕或單一帳號
