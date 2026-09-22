@@ -698,23 +698,47 @@
     function apiGet(params, options) {
         options = options || {};
         var retries = options.retries != null ? options.retries : 3;
+        var timeoutMs = options.timeoutMs != null ? options.timeoutMs : 12000;
+        var retryDelays = options.retryDelays;
         var qs = Object.keys(params).map(function(k) {
             return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
         }).join('&');
         var url = API_URL + '?' + qs;
 
         function attempt(n) {
-            return fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store' })
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            var timer = null;
+            var fetchOpts = { method: 'GET', redirect: 'follow', cache: 'no-store' };
+            if (controller) {
+                timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+                fetchOpts.signal = controller.signal;
+            }
+            function clearTimer() {
+                if (timer) clearTimeout(timer);
+            }
+            return fetch(url, fetchOpts)
                 .then(function(r) {
+                    clearTimer();
                     return r.text().then(function(text) {
                         var data = parseApiResponse(r, text);
                         return data;
                     });
                 })
                 .catch(function(err) {
+                    clearTimer();
+                    if (err && err.name === 'AbortError') {
+                        var timeoutErr = new Error('請求逾時，請重試');
+                        timeoutErr.retryable = true;
+                        err = timeoutErr;
+                    }
                     var retryable = err.retryable !== false;
                     if (retryable && n < retries) {
-                        var delay = Math.min(1000 * Math.pow(2, n), 8000) + Math.floor(Math.random() * 400);
+                        var delay;
+                        if (retryDelays && retryDelays.length) {
+                            delay = retryDelays[Math.min(n, retryDelays.length - 1)];
+                        } else {
+                            delay = Math.min(1000 * Math.pow(2, n), 8000) + Math.floor(Math.random() * 400);
+                        }
                         console.warn('API retry', n + 1, params.action, err.message);
                         return sleep(delay).then(function() { return attempt(n + 1); });
                     }
@@ -757,12 +781,40 @@
         return attemptPost(0);
     }
 
+    var CONFIG_SESSION_KEY = 'ksps_config_cache_v1';
+    var lastAppliedConfigSig = '';
+    var userTouchedConfigForm = false;
+
     // ===== Init =====
     document.addEventListener('DOMContentLoaded', function() {
         initDates();
-        loadConfig();
+        var hadCache = applyConfigFromSessionCache();
+        if (!hadCache) {
+            showToast('載入設定中…', 'info');
+        }
+        bindConfigFormInteractionTracking();
+        loadConfig({ fromCache: hadCache });
         checkSession();
     });
+
+    function bindConfigFormInteractionTracking() {
+        ['logCourse', 'logTeacher', 'logTime', 'attCourse'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', function() { userTouchedConfigForm = true; });
+            }
+        });
+    }
+
+    function configPayloadSignature(data) {
+        if (!data || !data.success) return '';
+        return JSON.stringify({
+            config: data.config,
+            staff: data.staff,
+            students: data.students,
+            courses: data.courses
+        });
+    }
 
     function initDates() {
         const today = new Date();
@@ -813,33 +865,82 @@
     }
 
     // ===== Load Config from GAS =====
-    function loadConfig() {
-        apiGet({ action: 'load_config' })
+    function applyConfigData(data, options) {
+        if (!data || !data.success) return false;
+        options = options || {};
+        appConfig = data.config;
+        appStaff = data.staff;
+        appStudents = data.students;
+        appCourses = data.courses;
+
+        if (appConfig['學校名稱']) {
+            document.getElementById('siteTitle').textContent = appConfig['學校名稱'] + appConfig['進修部名稱'] + '管理系統';
+        }
+        if (appConfig['上課時間']) {
+            document.getElementById('logTime').value = appConfig['上課時間'];
+        }
+
+        populateCourses();
+        populateTeachers();
+        populateStudents();
+
+        var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+        var todayWeekday = weekdays[new Date().getDay()];
+        if (!options || !options.skipAutoSelect) {
+            autoSelectCourse('log', todayWeekday);
+            autoSelectCourse('att', todayWeekday);
+        }
+        lastAppliedConfigSig = configPayloadSignature(data);
+        return true;
+    }
+
+    function applyConfigFromSessionCache() {
+        try {
+            var raw = sessionStorage.getItem(CONFIG_SESSION_KEY);
+            if (!raw) return false;
+            return applyConfigData(JSON.parse(raw));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function saveConfigSessionCache(data) {
+        try {
+            if (data && data.success) {
+                sessionStorage.setItem(CONFIG_SESSION_KEY, JSON.stringify(data));
+            }
+        } catch (e) {}
+    }
+
+    function loadConfig(options) {
+        options = options || {};
+        apiGet({ action: 'load_config' }, {
+            retries: 2,
+            retryDelays: [400, 800]
+        })
             .then(function(data) {
-                if (!data.success) { showToast('載入設定失敗: ' + (data.error || ''), 'error'); return; }
+                if (!data.success) {
+                    if (!options.fromCache) {
+                        showToast('載入設定失敗: ' + (data.error || ''), 'error');
+                    }
+                    return;
+                }
+                var prevSig = lastAppliedConfigSig;
+                var nextSig = configPayloadSignature(data);
+                saveConfigSessionCache(data);
                 appConfig = data.config;
                 appStaff = data.staff;
                 appStudents = data.students;
                 appCourses = data.courses;
-
-                if (appConfig['學校名稱']) {
-                    document.getElementById('siteTitle').textContent = appConfig['學校名稱'] + appConfig['進修部名稱'] + '管理系統';
+                if (userTouchedConfigForm && prevSig && nextSig === prevSig) {
+                    return;
                 }
-                if (appConfig['上課時間']) {
-                    document.getElementById('logTime').value = appConfig['上課時間'];
-                }
-
-                populateCourses();
-                populateTeachers();
-                populateStudents();
-
-                var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-                var todayWeekday = weekdays[new Date().getDay()];
-                autoSelectCourse('log', todayWeekday);
-                autoSelectCourse('att', todayWeekday);
+                applyConfigData(data, { skipAutoSelect: userTouchedConfigForm });
             })
             .catch(function(err) {
-                showToast(err.message || '無法連線到伺服器', 'error');
+                if (!options.fromCache) {
+                    showToast(err.message || '無法連線到伺服器', 'error');
+                }
                 console.error(err);
             });
     }
@@ -860,13 +961,16 @@
             attSel.appendChild(opt2);
         });
 
-        // Course change -> auto select teacher
-        logSel.addEventListener('change', function() {
-            var opt = this.options[this.selectedIndex];
-            if (opt.dataset.teacher) {
-                document.getElementById('logTeacher').value = opt.dataset.teacher;
-            }
-        });
+        // Course change -> auto select teacher（只綁一次，避免背景 refresh 重複註冊）
+        if (!populateCourses._teacherBound) {
+            populateCourses._teacherBound = true;
+            logSel.addEventListener('change', function() {
+                var opt = this.options[this.selectedIndex];
+                if (opt.dataset.teacher) {
+                    document.getElementById('logTeacher').value = opt.dataset.teacher;
+                }
+            });
+        }
     }
 
     function populateTeachers() {

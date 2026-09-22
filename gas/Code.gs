@@ -1,8 +1,12 @@
 // ===== 全域設定 =====
 var SHEET_ID = '1eaSKqrp7iQyW2yahpSV0a3ZT4A3jVo_lZjHpQQvcfNw';
+var _ss = null;
 
 function getSpreadsheet() {
-  return SpreadsheetApp.openById(SHEET_ID);
+  if (!_ss) {
+    _ss = SpreadsheetApp.openById(SHEET_ID);
+  }
+  return _ss;
 }
 
 function getSheet(name) {
@@ -352,7 +356,30 @@ function verifyAdmin(pwd) {
 
 // ===== Task 2: 公開 API =====
 
+var LOAD_CONFIG_CACHE_KEY = 'load_config_v1';
+var LOAD_CONFIG_CACHE_TTL = 120;
+
 function loadConfig() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(LOAD_CONFIG_CACHE_KEY);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      cache.remove(LOAD_CONFIG_CACHE_KEY);
+    }
+  }
+
+  var payload = loadConfigFromSheets_();
+  try {
+    cache.put(LOAD_CONFIG_CACHE_KEY, JSON.stringify(payload), LOAD_CONFIG_CACHE_TTL);
+  } catch (e2) {
+    // 快取失敗不阻擋回應
+  }
+  return payload;
+}
+
+function loadConfigFromSheets_() {
   var settings = readSettingsMap_();
   var config = {};
   Object.keys(settings).forEach(function(key) {
