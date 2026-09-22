@@ -706,21 +706,26 @@
         var url = API_URL + '?' + qs;
 
         function attempt(n) {
-            var controller = new AbortController();
-            var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
-            return fetch(url, {
-                method: 'GET',
-                redirect: 'follow',
-                cache: 'no-store',
-                signal: controller.signal
-            })
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            var timer = null;
+            var fetchOpts = { method: 'GET', redirect: 'follow', cache: 'no-store' };
+            if (controller) {
+                timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+                fetchOpts.signal = controller.signal;
+            }
+            function clearTimer() {
+                if (timer) clearTimeout(timer);
+            }
+            return fetch(url, fetchOpts)
                 .then(function(r) {
+                    clearTimer();
                     return r.text().then(function(text) {
                         var data = parseApiResponse(r, text);
                         return data;
                     });
                 })
                 .catch(function(err) {
+                    clearTimer();
                     if (err && err.name === 'AbortError') {
                         var timeoutErr = new Error('請求逾時，請重試');
                         timeoutErr.retryable = true;
@@ -738,9 +743,6 @@
                         return sleep(delay).then(function() { return attempt(n + 1); });
                     }
                     throw err;
-                })
-                .finally(function() {
-                    clearTimeout(timer);
                 });
         }
         return attempt(0);
@@ -779,7 +781,9 @@
         return attemptPost(0);
     }
 
-    var CONFIG_SESSION_KEY = 'ksps_config_cache';
+    var CONFIG_SESSION_KEY = 'ksps_config_cache_v1';
+    var lastAppliedConfigSig = '';
+    var userTouchedConfigForm = false;
 
     // ===== Init =====
     document.addEventListener('DOMContentLoaded', function() {
@@ -788,9 +792,29 @@
         if (!hadCache) {
             showToast('載入設定中…', 'info');
         }
+        bindConfigFormInteractionTracking();
         loadConfig({ fromCache: hadCache });
         checkSession();
     });
+
+    function bindConfigFormInteractionTracking() {
+        ['logCourse', 'logTeacher', 'logTime', 'attCourse'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', function() { userTouchedConfigForm = true; });
+            }
+        });
+    }
+
+    function configPayloadSignature(data) {
+        if (!data || !data.success) return '';
+        return JSON.stringify({
+            config: data.config,
+            staff: data.staff,
+            students: data.students,
+            courses: data.courses
+        });
+    }
 
     function initDates() {
         const today = new Date();
@@ -841,8 +865,9 @@
     }
 
     // ===== Load Config from GAS =====
-    function applyConfigData(data) {
+    function applyConfigData(data, options) {
         if (!data || !data.success) return false;
+        options = options || {};
         appConfig = data.config;
         appStaff = data.staff;
         appStudents = data.students;
@@ -861,8 +886,11 @@
 
         var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
         var todayWeekday = weekdays[new Date().getDay()];
-        autoSelectCourse('log', todayWeekday);
-        autoSelectCourse('att', todayWeekday);
+        if (!options || !options.skipAutoSelect) {
+            autoSelectCourse('log', todayWeekday);
+            autoSelectCourse('att', todayWeekday);
+        }
+        lastAppliedConfigSig = configPayloadSignature(data);
         return true;
     }
 
@@ -897,8 +925,17 @@
                     }
                     return;
                 }
+                var prevSig = lastAppliedConfigSig;
+                var nextSig = configPayloadSignature(data);
                 saveConfigSessionCache(data);
-                applyConfigData(data);
+                appConfig = data.config;
+                appStaff = data.staff;
+                appStudents = data.students;
+                appCourses = data.courses;
+                if (userTouchedConfigForm && prevSig && nextSig === prevSig) {
+                    return;
+                }
+                applyConfigData(data, { skipAutoSelect: userTouchedConfigForm });
             })
             .catch(function(err) {
                 if (!options.fromCache) {
