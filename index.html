@@ -698,13 +698,22 @@
     function apiGet(params, options) {
         options = options || {};
         var retries = options.retries != null ? options.retries : 3;
+        var timeoutMs = options.timeoutMs != null ? options.timeoutMs : 12000;
+        var retryDelays = options.retryDelays;
         var qs = Object.keys(params).map(function(k) {
             return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
         }).join('&');
         var url = API_URL + '?' + qs;
 
         function attempt(n) {
-            return fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store' })
+            var controller = new AbortController();
+            var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+            return fetch(url, {
+                method: 'GET',
+                redirect: 'follow',
+                cache: 'no-store',
+                signal: controller.signal
+            })
                 .then(function(r) {
                     return r.text().then(function(text) {
                         var data = parseApiResponse(r, text);
@@ -712,13 +721,26 @@
                     });
                 })
                 .catch(function(err) {
+                    if (err && err.name === 'AbortError') {
+                        var timeoutErr = new Error('請求逾時，請重試');
+                        timeoutErr.retryable = true;
+                        err = timeoutErr;
+                    }
                     var retryable = err.retryable !== false;
                     if (retryable && n < retries) {
-                        var delay = Math.min(1000 * Math.pow(2, n), 8000) + Math.floor(Math.random() * 400);
+                        var delay;
+                        if (retryDelays && retryDelays.length) {
+                            delay = retryDelays[Math.min(n, retryDelays.length - 1)];
+                        } else {
+                            delay = Math.min(1000 * Math.pow(2, n), 8000) + Math.floor(Math.random() * 400);
+                        }
                         console.warn('API retry', n + 1, params.action, err.message);
                         return sleep(delay).then(function() { return attempt(n + 1); });
                     }
                     throw err;
+                })
+                .finally(function() {
+                    clearTimeout(timer);
                 });
         }
         return attempt(0);
@@ -757,10 +779,16 @@
         return attemptPost(0);
     }
 
+    var CONFIG_SESSION_KEY = 'ksps_config_cache';
+
     // ===== Init =====
     document.addEventListener('DOMContentLoaded', function() {
         initDates();
-        loadConfig();
+        var hadCache = applyConfigFromSessionCache();
+        if (!hadCache) {
+            showToast('載入設定中…', 'info');
+        }
+        loadConfig({ fromCache: hadCache });
         checkSession();
     });
 
@@ -813,33 +841,69 @@
     }
 
     // ===== Load Config from GAS =====
-    function loadConfig() {
-        apiGet({ action: 'load_config' })
+    function applyConfigData(data) {
+        if (!data || !data.success) return false;
+        appConfig = data.config;
+        appStaff = data.staff;
+        appStudents = data.students;
+        appCourses = data.courses;
+
+        if (appConfig['學校名稱']) {
+            document.getElementById('siteTitle').textContent = appConfig['學校名稱'] + appConfig['進修部名稱'] + '管理系統';
+        }
+        if (appConfig['上課時間']) {
+            document.getElementById('logTime').value = appConfig['上課時間'];
+        }
+
+        populateCourses();
+        populateTeachers();
+        populateStudents();
+
+        var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+        var todayWeekday = weekdays[new Date().getDay()];
+        autoSelectCourse('log', todayWeekday);
+        autoSelectCourse('att', todayWeekday);
+        return true;
+    }
+
+    function applyConfigFromSessionCache() {
+        try {
+            var raw = sessionStorage.getItem(CONFIG_SESSION_KEY);
+            if (!raw) return false;
+            return applyConfigData(JSON.parse(raw));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function saveConfigSessionCache(data) {
+        try {
+            if (data && data.success) {
+                sessionStorage.setItem(CONFIG_SESSION_KEY, JSON.stringify(data));
+            }
+        } catch (e) {}
+    }
+
+    function loadConfig(options) {
+        options = options || {};
+        apiGet({ action: 'load_config' }, {
+            retries: 2,
+            retryDelays: [400, 800]
+        })
             .then(function(data) {
-                if (!data.success) { showToast('載入設定失敗: ' + (data.error || ''), 'error'); return; }
-                appConfig = data.config;
-                appStaff = data.staff;
-                appStudents = data.students;
-                appCourses = data.courses;
-
-                if (appConfig['學校名稱']) {
-                    document.getElementById('siteTitle').textContent = appConfig['學校名稱'] + appConfig['進修部名稱'] + '管理系統';
+                if (!data.success) {
+                    if (!options.fromCache) {
+                        showToast('載入設定失敗: ' + (data.error || ''), 'error');
+                    }
+                    return;
                 }
-                if (appConfig['上課時間']) {
-                    document.getElementById('logTime').value = appConfig['上課時間'];
-                }
-
-                populateCourses();
-                populateTeachers();
-                populateStudents();
-
-                var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-                var todayWeekday = weekdays[new Date().getDay()];
-                autoSelectCourse('log', todayWeekday);
-                autoSelectCourse('att', todayWeekday);
+                saveConfigSessionCache(data);
+                applyConfigData(data);
             })
             .catch(function(err) {
-                showToast(err.message || '無法連線到伺服器', 'error');
+                if (!options.fromCache) {
+                    showToast(err.message || '無法連線到伺服器', 'error');
+                }
                 console.error(err);
             });
     }
@@ -860,13 +924,16 @@
             attSel.appendChild(opt2);
         });
 
-        // Course change -> auto select teacher
-        logSel.addEventListener('change', function() {
-            var opt = this.options[this.selectedIndex];
-            if (opt.dataset.teacher) {
-                document.getElementById('logTeacher').value = opt.dataset.teacher;
-            }
-        });
+        // Course change -> auto select teacher（只綁一次，避免背景 refresh 重複註冊）
+        if (!populateCourses._teacherBound) {
+            populateCourses._teacherBound = true;
+            logSel.addEventListener('change', function() {
+                var opt = this.options[this.selectedIndex];
+                if (opt.dataset.teacher) {
+                    document.getElementById('logTeacher').value = opt.dataset.teacher;
+                }
+            });
+        }
     }
 
     function populateTeachers() {
