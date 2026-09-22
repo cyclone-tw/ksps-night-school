@@ -6,7 +6,70 @@ function getSpreadsheet() {
 }
 
 function getSheet(name) {
-  return getSpreadsheet().getSheetByName(name);
+  var sheet = getSpreadsheet().getSheetByName(name);
+  if (!sheet) throw new Error('找不到工作表：' + name);
+  return sheet;
+}
+
+/** 只讀實際有資料的範圍，避免 getDataRange 掃到過大空白區 */
+function getSheetValues_(name, maxCols) {
+  var sheet = getSheet(name);
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 1 || lastCol < 1) return [];
+  if (maxCols && lastCol > maxCols) lastCol = maxCols;
+  return sheet.getRange(1, 1, lastRow, lastCol).getValues();
+}
+
+function readSettingsMap_() {
+  var values = getSheetValues_('系統設定', 2);
+  var config = {};
+  for (var i = 0; i < values.length; i++) {
+    var key = String(values[i][0] || '').trim();
+    if (!key) continue;
+    config[key] = values[i][1];
+  }
+  return config;
+}
+
+function normalizeSettingKey_(key) {
+  return String(key || '').trim().replace(/\s+/g, '');
+}
+
+function getSettingByHints_(hints) {
+  var values = getSheetValues_('系統設定', 2);
+  for (var i = 0; i < values.length; i++) {
+    var key = normalizeSettingKey_(values[i][0]);
+    for (var h = 0; h < hints.length; h++) {
+      if (key.indexOf(normalizeSettingKey_(hints[h])) !== -1) {
+        var val = String(values[i][1] || '').trim();
+        if (val) return val;
+      }
+    }
+  }
+  return '';
+}
+
+function formatSheetDate_(d) {
+  if (d instanceof Date) {
+    return Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+  return String(d || '');
+}
+
+/** GET 參數可能已被 Apps Script 解碼一次，避免二次 decode 失敗 */
+function parseRequestData_(raw) {
+  if (raw == null || raw === '') throw new Error('缺少 data 參數');
+  var text = String(raw);
+  try {
+    return JSON.parse(text);
+  } catch (e1) {
+    try {
+      return JSON.parse(decodeURIComponent(text));
+    } catch (e2) {
+      throw new Error('無法解析提交資料');
+    }
+  }
 }
 
 var DEFAULT_REPORT_FOLDER_ID = ''; // 從 Google Sheet「系統設定」讀取，不寫入程式碼
@@ -28,19 +91,7 @@ function processMoveQueue() {
   var list = JSON.parse(queue);
   if (list.length === 0) return;
 
-  var folderId = DEFAULT_REPORT_FOLDER_ID;
-  try {
-    var settings = getSheet('系統設定').getDataRange().getValues();
-    for (var i = 0; i < settings.length; i++) {
-      var key = String(settings[i][0]).trim().replace(/\s/g, '');
-      if (key.indexOf('報表資料夾') !== -1 || key.indexOf('資料夾ID') !== -1) {
-        var val = String(settings[i][1]).trim();
-        if (val) folderId = val;
-        break;
-      }
-    }
-  } catch (e) {}
-
+  var folderId = DEFAULT_REPORT_FOLDER_ID || getSettingByHints_(['報表資料夾', '資料夾ID']);
   if (!folderId) return; // 尚未設定資料夾 ID，跳過移動
 
   var folder = DriveApp.getFolderById(folderId);
@@ -234,12 +285,10 @@ function doGet(e) {
         result = checkDateExists(e.parameter.date);
         break;
       case 'submit_log':
-        var logData = JSON.parse(decodeURIComponent(e.parameter.data));
-        result = submitLog(logData);
+        result = submitLog(parseRequestData_(e.parameter.data));
         break;
       case 'submit_attendance':
-        var attData = JSON.parse(decodeURIComponent(e.parameter.data));
-        result = submitAttendance(attData);
+        result = submitAttendance(parseRequestData_(e.parameter.data));
         break;
       default:
         result = { success: false, error: '未知的 action: ' + action };
@@ -253,17 +302,22 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  var data = JSON.parse(e.postData.contents);
-  var action = data.action || e.parameter.action;
   var result;
-
   try {
+    var data = {};
+    if (e.postData && e.postData.contents) {
+      data = JSON.parse(e.postData.contents);
+    }
+    var action = data.action || (e.parameter && e.parameter.action);
     switch (action) {
       case 'submit_log':
         result = submitLog(data);
         break;
       case 'submit_attendance':
         result = submitAttendance(data);
+        break;
+      case 'check_date':
+        result = checkDateExists(data.date || (e.parameter && e.parameter.date));
         break;
       default:
         result = { success: false, error: '未知的 action: ' + action };
@@ -279,14 +333,8 @@ function doPost(e) {
 // ===== 管理者驗證 =====
 function handleAdminAction(e, callback) {
   var pwd = e.parameter.pwd;
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var adminPwd = '';
-  for (var i = 0; i < settings.length; i++) {
-    if (settings[i][0] === '管理者密碼') {
-      adminPwd = String(settings[i][1]);
-      break;
-    }
-  }
+  var settings = readSettingsMap_();
+  var adminPwd = String(settings['管理者密碼'] || '');
   if (pwd !== adminPwd) {
     return { success: false, error: '密碼錯誤，無權限執行此操作' };
   }
@@ -294,14 +342,8 @@ function handleAdminAction(e, callback) {
 }
 
 function verifyAdmin(pwd) {
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var adminPwd = '';
-  for (var i = 0; i < settings.length; i++) {
-    if (settings[i][0] === '管理者密碼') {
-      adminPwd = String(settings[i][1]);
-      break;
-    }
-  }
+  var settings = readSettingsMap_();
+  var adminPwd = String(settings['管理者密碼'] || '');
   if (pwd === adminPwd) {
     return { success: true };
   }
@@ -311,17 +353,15 @@ function verifyAdmin(pwd) {
 // ===== Task 2: 公開 API =====
 
 function loadConfig() {
-  var settings = getSheet('系統設定').getDataRange().getValues();
+  var settings = readSettingsMap_();
   var config = {};
-  for (var i = 0; i < settings.length; i++) {
-    var key = settings[i][0];
-    if (key === '管理者密碼') continue;
-    if (key === '鐘點費單價' || key === '每日節數') continue;
-    config[key] = settings[i][1];
-  }
+  Object.keys(settings).forEach(function(key) {
+    if (key === '管理者密碼') return;
+    if (key === '鐘點費單價' || key === '每日節數') return;
+    config[key] = settings[key];
+  });
 
-  var staffSheet = getSheet('人員名冊');
-  var staffData = staffSheet.getDataRange().getValues();
+  var staffData = getSheetValues_('人員名冊', 6);
   var staff = [];
   for (var i = 1; i < staffData.length; i++) {
     if (staffData[i][2] === '在職' && staffData[i][1] !== '校長') {
@@ -332,8 +372,7 @@ function loadConfig() {
     }
   }
 
-  var studentSheet = getSheet('學生名冊');
-  var studentData = studentSheet.getDataRange().getValues();
+  var studentData = getSheetValues_('學生名冊', 3);
   var students = [];
   for (var i = 1; i < studentData.length; i++) {
     if (studentData[i][1] === '在學') {
@@ -341,10 +380,10 @@ function loadConfig() {
     }
   }
 
-  var courseSheet = getSheet('課程設定');
-  var courseData = courseSheet.getDataRange().getValues();
+  var courseData = getSheetValues_('課程設定', 3);
   var courses = [];
   for (var i = 1; i < courseData.length; i++) {
+    if (!courseData[i][0]) continue;
     courses.push({
       name: courseData[i][0],
       weekday: courseData[i][1],
@@ -364,34 +403,24 @@ function loadConfig() {
 function checkDateExists(dateStr) {
   var hasLog = false;
   var hasAtt = false;
-  var logSheet = getSheet('教學日誌');
-  var logData = logSheet.getDataRange().getValues();
+  var logData = getSheetValues_('教學日誌', 1);
   for (var i = 1; i < logData.length; i++) {
-    var d = logData[i][0];
-    if (d instanceof Date) d = Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
-    if (d === dateStr) { hasLog = true; break; }
+    if (formatSheetDate_(logData[i][0]) === dateStr) { hasLog = true; break; }
   }
-  var attSheet = getSheet('出缺席記錄');
-  var attData = attSheet.getDataRange().getValues();
+  var attData = getSheetValues_('出缺席記錄', 1);
   for (var i = 1; i < attData.length; i++) {
-    var d = attData[i][0];
-    if (d instanceof Date) d = Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
-    if (d === dateStr) { hasAtt = true; break; }
+    if (formatSheetDate_(attData[i][0]) === dateStr) { hasAtt = true; break; }
   }
   return { success: true, hasLog: hasLog, hasAttendance: hasAtt };
 }
 
 function submitLog(data) {
   var sheet = getSheet('教學日誌');
-  var rows = sheet.getDataRange().getValues();
+  var rows = getSheetValues_('教學日誌', 6);
   var existingRow = -1;
   for (var i = 1; i < rows.length; i++) {
-    var rowDate = rows[i][0];
-    if (rowDate instanceof Date) {
-      rowDate = Utilities.formatDate(rowDate, 'Asia/Taipei', 'yyyy-MM-dd');
-    }
-    if (rowDate === data.date) {
-      existingRow = i + 1; // Sheet row is 1-based
+    if (formatSheetDate_(rows[i][0]) === data.date) {
+      existingRow = i + 1;
       break;
     }
   }
@@ -406,7 +435,8 @@ function submitLog(data) {
 
 function submitAttendance(data) {
   var sheet = getSheet('出缺席記錄');
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var lastCol = Math.max(sheet.getLastColumn(), 3);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
 
   var studentNames = Object.keys(data.attendance);
   studentNames.forEach(function(name) {
@@ -417,15 +447,10 @@ function submitAttendance(data) {
     }
   });
 
-  // 找同日期的既有資料
-  var allData = sheet.getDataRange().getValues();
+  var allData = getSheetValues_('出缺席記錄');
   var existingRow = -1;
   for (var i = 1; i < allData.length; i++) {
-    var rowDate = allData[i][0];
-    if (rowDate instanceof Date) {
-      rowDate = Utilities.formatDate(rowDate, 'Asia/Taipei', 'yyyy-MM-dd');
-    }
-    if (rowDate === data.date) {
+    if (formatSheetDate_(allData[i][0]) === data.date) {
       existingRow = i + 1;
       break;
     }
@@ -448,15 +473,10 @@ function submitAttendance(data) {
 // ===== Task 3: 管理者 API =====
 
 function loadAdminConfig() {
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var config = {};
-  for (var i = 0; i < settings.length; i++) {
-    config[settings[i][0]] = settings[i][1];
-  }
+  var config = readSettingsMap_();
   delete config['管理者密碼'];
 
-  var staffSheet = getSheet('人員名冊');
-  var staffData = staffSheet.getDataRange().getValues();
+  var staffData = getSheetValues_('人員名冊', 6);
   var staff = [];
   for (var i = 1; i < staffData.length; i++) {
     staff.push({
@@ -464,22 +484,21 @@ function loadAdminConfig() {
       role: staffData[i][1],
       status: staffData[i][2],
       extraFeeName: staffData[i][3] || '',
-      extraFeeAmount: staffData[i][4] || 0,
+      extraFeeAmount: staffData[i][4] || '',
       note: staffData[i][5] || ''
     });
   }
 
-  var studentSheet = getSheet('學生名冊');
-  var studentData = studentSheet.getDataRange().getValues();
+  var studentData = getSheetValues_('學生名冊', 3);
   var students = [];
   for (var i = 1; i < studentData.length; i++) {
     students.push({ name: studentData[i][0], status: studentData[i][1] });
   }
 
-  var courseSheet = getSheet('課程設定');
-  var courseData = courseSheet.getDataRange().getValues();
+  var courseData = getSheetValues_('課程設定', 3);
   var courses = [];
   for (var i = 1; i < courseData.length; i++) {
+    if (!courseData[i][0]) continue;
     courses.push({
       name: courseData[i][0],
       weekday: courseData[i][1],
@@ -499,9 +518,7 @@ function loadAdminConfig() {
 function getDashboard(dateParam) {
   var targetStr = dateParam || Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
 
-  // 取得在學學生名冊（作為分母）
-  var studentSheet = getSheet('學生名冊');
-  var studentData = studentSheet.getDataRange().getValues();
+  var studentData = getSheetValues_('學生名冊', 2);
   var allStudents = [];
   for (var s = 1; s < studentData.length; s++) {
     if (studentData[s][1] === '在學') {
@@ -510,16 +527,10 @@ function getDashboard(dateParam) {
   }
   var totalStudents = allStudents.length;
 
-  // 教學日誌
-  var logSheet = getSheet('教學日誌');
-  var logData = logSheet.getDataRange().getValues();
+  var logData = getSheetValues_('教學日誌', 6);
   var dayLogs = [];
   for (var i = 1; i < logData.length; i++) {
-    var logDate = logData[i][0];
-    if (logDate instanceof Date) {
-      logDate = Utilities.formatDate(logDate, 'Asia/Taipei', 'yyyy-MM-dd');
-    }
-    if (logDate === targetStr) {
+    if (formatSheetDate_(logData[i][0]) === targetStr) {
       dayLogs.push({
         date: targetStr,
         weekday: logData[i][1],
@@ -531,26 +542,20 @@ function getDashboard(dateParam) {
     }
   }
 
-  // 出缺席
-  var attSheet = getSheet('出缺席記錄');
-  var attData = attSheet.getDataRange().getValues();
-  var headers = attData[0];
+  var attData = getSheetValues_('出缺席記錄');
+  var headers = attData.length ? attData[0] : [];
   var hasAttData = false;
   var presentList = [];
   var leaveList = [];
 
   for (var i = 1; i < attData.length; i++) {
-    var attDate = attData[i][0];
-    if (attDate instanceof Date) {
-      attDate = Utilities.formatDate(attDate, 'Asia/Taipei', 'yyyy-MM-dd');
-    }
-    if (attDate === targetStr) {
+    if (formatSheetDate_(attData[i][0]) === targetStr) {
       hasAttData = true;
       presentList = [];
       leaveList = [];
       for (var c = 3; c < headers.length; c++) {
         var name = headers[c];
-        if (allStudents.indexOf(name) === -1) continue; // 只算在學學生
+        if (allStudents.indexOf(name) === -1) continue;
         var status = attData[i][c];
         if (status === '✓') presentList.push(name);
         else if (status === '△') leaveList.push(name);
@@ -558,7 +563,6 @@ function getDashboard(dateParam) {
     }
   }
 
-  // 缺席 = 在學名冊 - 出席 - 請假
   var markedNames = presentList.concat(leaveList);
   var absentList = [];
   if (hasAttData) {
@@ -592,26 +596,19 @@ function getDashboard(dateParam) {
   };
 }
 
-// ===== Task 4: 教學日誌 XLS 生成 =====
+// ===== Task 4: 教學日誌 XLS 生成（批次寫入） =====
 
 function exportTeachingLog(yearStr, monthStr) {
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var config = {};
-  for (var i = 0; i < settings.length; i++) config[settings[i][0]] = settings[i][1];
-
+  var config = readSettingsMap_();
   var year = parseInt(yearStr);
   var month = parseInt(monthStr);
 
-  var logSheet = getSheet('教學日誌');
-  var logData = logSheet.getDataRange().getValues();
+  var logData = getSheetValues_('教學日誌', 6);
   var records = [];
-
   for (var i = 1; i < logData.length; i++) {
     var d = logData[i][0];
     if (!(d instanceof Date)) continue;
-    var rocYear = d.getFullYear() - 1911;
-    var m = d.getMonth() + 1;
-    if (rocYear === year && m === month) {
+    if ((d.getFullYear() - 1911) === year && (d.getMonth() + 1) === month) {
       records.push({
         date: d,
         weekday: logData[i][1],
@@ -622,7 +619,6 @@ function exportTeachingLog(yearStr, monthStr) {
       });
     }
   }
-
   records.sort(function(a, b) { return a.date - b.date; });
 
   var fileName = config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] +
@@ -639,82 +635,75 @@ function exportTeachingLog(yearStr, monthStr) {
   ws.setColumnWidth(7, 200);
   ws.setColumnWidth(8, 90);
 
-  ws.getRange('A1:H1').merge();
-  var titleCell = ws.getRange('A1');
-  titleCell.setValue(config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] +
-                     ' ' + year + '年度' + month + '月 教學日誌');
-  titleCell.setFontFamily('標楷體').setFontSize(20).setFontWeight('bold')
+  var title = config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] +
+              ' ' + year + '年度' + month + '月 教學日誌';
+  var headers = ['序號', '日期', '星期', '時間', '課程', '上課內容', '教師簽名', '授課教師'];
+  var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  var values = [[title, '', '', '', '', '', '', ''], headers];
+
+  for (var i = 0; i < records.length; i++) {
+    var r = records[i];
+    var dateStr = (r.date.getMonth() + 1) + '/' + r.date.getDate();
+    var weekday = r.weekday || weekdays[r.date.getDay()];
+    values.push([i + 1, dateStr, weekday, r.time, r.course, r.content, '', r.teacher]);
+  }
+
+  var signRowOffset = 3;
+  var signLabelRow = ['', '進修部主任：', '', '', '校長：', '', '', ''];
+  for (var pad = 0; pad < signRowOffset - 1; pad++) {
+    values.push(['', '', '', '', '', '', '', '']);
+  }
+  values.push(signLabelRow);
+
+  ws.getRange(1, 1, values.length, 8).setValues(values);
+  ws.getRange(1, 1, 1, 8).merge()
+    .setFontFamily('標楷體').setFontSize(20).setFontWeight('bold')
     .setHorizontalAlignment('center');
   ws.setRowHeight(1, 50);
 
-  var headers = ['序號', '日期', '星期', '時間', '課程', '上課內容', '教師簽名', '授課教師'];
   var headerRange = ws.getRange(2, 1, 1, 8);
-  headerRange.setValues([headers]);
   headerRange.setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
-    .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  headerRange.setBorder(true, true, true, true, true, true);
+    .setHorizontalAlignment('center').setVerticalAlignment('middle')
+    .setBorder(true, true, true, true, true, true);
   ws.setRowHeight(2, 55);
 
-  for (var i = 0; i < records.length; i++) {
-    var row = i + 3;
-    var r = records[i];
-    var dateStr = (r.date.getMonth() + 1) + '/' + r.date.getDate();
-    var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    var weekday = r.weekday || weekdays[r.date.getDay()];
-
-    ws.getRange(row, 1).setValue(i + 1);
-    ws.getRange(row, 2).setValue(dateStr);
-    ws.getRange(row, 3).setValue(weekday);
-    ws.getRange(row, 4).setValue(r.time);
-    ws.getRange(row, 5).setValue(r.course);
-    ws.getRange(row, 6).setValue(r.content);
-    ws.getRange(row, 8).setValue(r.teacher);
-
-    var dataRange = ws.getRange(row, 1, 1, 8);
-    dataRange.setFontFamily('標楷體').setFontSize(14)
-      .setVerticalAlignment('middle');
-    dataRange.setBorder(true, true, true, true, true, true);
-    ws.setRowHeight(row, 55);
-
-    ws.getRange(row, 1, 1, 4).setHorizontalAlignment('center');
-    ws.getRange(row, 8).setHorizontalAlignment('center');
+  if (records.length > 0) {
+    var dataEnd = 2 + records.length;
+    var dataRange = ws.getRange(3, 1, dataEnd, 8);
+    dataRange.setFontFamily('標楷體').setFontSize(14).setVerticalAlignment('middle')
+      .setBorder(true, true, true, true, true, true);
+    ws.getRange(3, 1, dataEnd, 4).setHorizontalAlignment('center');
+    ws.getRange(3, 8, dataEnd, 8).setHorizontalAlignment('center');
+    for (var rh = 0; rh < records.length; rh++) ws.setRowHeight(3 + rh, 55);
   }
 
-  var signRow = records.length + 5;
-  ws.getRange(signRow, 2, 1, 3).merge();
-  ws.getRange(signRow, 2).setValue('進修部主任：')
+  var signRow = 2 + records.length + signRowOffset;
+  ws.getRange(signRow, 2, 1, 3).merge()
     .setFontFamily('標楷體').setFontSize(18).setFontWeight('bold');
-  ws.getRange(signRow, 5, 1, 2).merge();
-  ws.getRange(signRow, 5).setValue('校長：')
+  ws.getRange(signRow, 5, 1, 2).merge()
     .setFontFamily('標楷體').setFontSize(18).setFontWeight('bold');
   ws.setRowHeight(signRow, 60);
 
   var fileId = newSS.getId();
   queueFileMove(fileId);
-  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
-
   return {
     success: true,
     fileName: fileName,
-    sheetUrl: sheetUrl,
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/' + fileId,
     recordCount: records.length
   };
 }
 
-// ===== Task 5: 月薪資總表 XLS 生成 =====
+// ===== Task 5: 月薪資總表（批次寫入） =====
 
 function exportSalary(yearStr, monthStr) {
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var config = {};
-  for (var i = 0; i < settings.length; i++) config[settings[i][0]] = settings[i][1];
-
+  var config = readSettingsMap_();
   var year = parseInt(yearStr);
   var month = parseInt(monthStr);
   var hourlyRate = parseInt(config['鐘點費單價']);
   var sessionsPerDay = parseInt(config['每日節數']);
 
-  var staffSheet = getSheet('人員名冊');
-  var staffData = staffSheet.getDataRange().getValues();
+  var staffData = getSheetValues_('人員名冊', 6);
   var staffList = [];
   for (var i = 1; i < staffData.length; i++) {
     if (staffData[i][2] === '在職') {
@@ -728,20 +717,14 @@ function exportSalary(yearStr, monthStr) {
     }
   }
 
-  var logSheet = getSheet('教學日誌');
-  var logData = logSheet.getDataRange().getValues();
+  var logData = getSheetValues_('教學日誌', 6);
   var teacherStats = {};
-
   for (var i = 1; i < logData.length; i++) {
     var d = logData[i][0];
     if (!(d instanceof Date)) continue;
-    var rocYear = d.getFullYear() - 1911;
-    var m = d.getMonth() + 1;
-    if (rocYear === year && m === month) {
+    if ((d.getFullYear() - 1911) === year && (d.getMonth() + 1) === month) {
       var teacher = logData[i][5];
-      if (!teacherStats[teacher]) {
-        teacherStats[teacher] = { days: 0, dates: [] };
-      }
+      if (!teacherStats[teacher]) teacherStats[teacher] = { days: 0, dates: [] };
       teacherStats[teacher].days++;
       teacherStats[teacher].dates.push((d.getMonth() + 1) + '/' + d.getDate());
     }
@@ -751,44 +734,24 @@ function exportSalary(yearStr, monthStr) {
   var fileName = config['學校名稱'] + config['進修部名稱'] + ' ' + year + '年' + month + '月支給費用';
   var newSS = SpreadsheetApp.create(fileName);
   var ws = newSS.getActiveSheet();
-
-  ws.setColumnWidth(1, 90);
-  ws.setColumnWidth(2, 120);
-  ws.setColumnWidth(3, 70);
-  ws.setColumnWidth(4, 70);
-  ws.setColumnWidth(5, 85);
-  ws.setColumnWidth(6, 80);
-  ws.setColumnWidth(7, 85);
-  ws.setColumnWidth(8, 80);
-  ws.setColumnWidth(9, 250);
-
-  ws.getRange('A1:I1').merge();
-  ws.getRange('A1').setValue(config['學校名稱'] + config['進修部名稱'] + '  ' + year + '年' + month + '月支給費用')
-    .setFontFamily('標楷體').setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
-  ws.setRowHeight(1, 35);
-
-  var headers = ['姓名', '上課期間', '授課天數', '授課節數', '鐘點費單價', '合計', '額外費用', '合計', '備註'];
-  ws.getRange(2, 1, 1, 9).setValues([headers])
-    .setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
-    .setHorizontalAlignment('center').setVerticalAlignment('middle')
-    .setBorder(true, true, true, true, true, true);
-  ws.setRowHeight(2, 40);
+  var widths = [90, 120, 70, 70, 85, 80, 85, 80, 250];
+  for (var w = 0; w < widths.length; w++) ws.setColumnWidth(w + 1, widths[w]);
 
   var lastDay = new Date(westYear, month, 0).getDate();
   var periodStr = month + '月1日～\n' + month + '月' + lastDay + '日';
-
   var sortedStaff = staffList.sort(function(a, b) {
     var order = { '校長': 0, '導師': 1, '進修部主任': 2, '教師': 3 };
     return (order[a.role] || 9) - (order[b.role] || 9);
   });
 
-  var dataStartRow = 3;
+  var title = config['學校名稱'] + config['進修部名稱'] + '  ' + year + '年' + month + '月支給費用';
+  var headers = ['姓名', '上課期間', '授課天數', '授課節數', '鐘點費單價', '合計', '額外費用', '合計', '備註'];
+  var values = [[title, '', '', '', '', '', '', '', ''], headers];
+
   for (var i = 0; i < sortedStaff.length; i++) {
-    var row = dataStartRow + i;
     var s = sortedStaff[i];
     var stats = teacherStats[s.name] || { days: 0, dates: [] };
     var isSchoolMaster = (s.role === '校長');
-
     var days = isSchoolMaster ? '' : stats.days;
     var sessions = isSchoolMaster ? '' : stats.days * sessionsPerDay;
     var rate = isSchoolMaster ? '' : hourlyRate;
@@ -796,65 +759,62 @@ function exportSalary(yearStr, monthStr) {
     var extraFee = s.extraFeeAmount > 0 ? s.extraFeeName + '\n' + s.extraFeeAmount : '';
     var grandTotal = (isSchoolMaster ? 0 : stats.days * sessionsPerDay * hourlyRate) + s.extraFeeAmount;
     var remark = isSchoolMaster ? '' : (stats.dates.length > 0 ? '授課日：' + stats.dates.join('、') : '本月無授課');
-
-    ws.getRange(row, 1).setValue(s.name);
-    ws.getRange(row, 2).setValue(periodStr).setWrap(true);
-    ws.getRange(row, 3).setValue(days);
-    ws.getRange(row, 4).setValue(sessions);
-    ws.getRange(row, 5).setValue(rate);
-    ws.getRange(row, 6).setValue(hourlyTotal);
-    ws.getRange(row, 7).setValue(extraFee).setWrap(true);
-    ws.getRange(row, 8).setValue(grandTotal);
-    ws.getRange(row, 9).setValue(remark).setWrap(true);
-
-    var dataRange = ws.getRange(row, 1, 1, 9);
-    dataRange.setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
-      .setVerticalAlignment('middle')
-      .setBorder(true, true, true, true, true, true);
-    ws.getRange(row, 1, 1, 8).setHorizontalAlignment('center');
-    ws.setRowHeight(row, 55);
+    values.push([s.name, periodStr, days, sessions, rate, hourlyTotal, extraFee, grandTotal, remark]);
   }
 
+  var dataStartRow = 3;
   var totalRow = dataStartRow + sortedStaff.length;
-  ws.getRange(totalRow, 1).setValue('合  計').setHorizontalAlignment('center');
+  values.push(['合  計', '', '', '', '', '', '', '', '']);
+
+  ws.getRange(1, 1, values.length, 9).setValues(values);
+  ws.getRange(1, 1, 1, 9).merge()
+    .setFontFamily('標楷體').setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
+  ws.setRowHeight(1, 35);
+  ws.getRange(2, 1, 1, 9).setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle')
+    .setBorder(true, true, true, true, true, true);
+  ws.setRowHeight(2, 40);
+
+  if (sortedStaff.length > 0) {
+    var bodyEnd = dataStartRow + sortedStaff.length - 1;
+    var body = ws.getRange(dataStartRow, 1, bodyEnd, 9);
+    body.setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
+      .setVerticalAlignment('middle').setWrap(true)
+      .setBorder(true, true, true, true, true, true);
+    ws.getRange(dataStartRow, 1, bodyEnd, 8).setHorizontalAlignment('center');
+    for (var rh = 0; rh < sortedStaff.length; rh++) ws.setRowHeight(dataStartRow + rh, 55);
+  }
 
   var lastDataRow = totalRow - 1;
-  ws.getRange(totalRow, 4).setFormula('=SUM(D' + dataStartRow + ':D' + lastDataRow + ')');
-  ws.getRange(totalRow, 6).setFormula('=SUM(F' + dataStartRow + ':F' + lastDataRow + ')');
-  ws.getRange(totalRow, 8).setFormula('=SUM(H' + dataStartRow + ':H' + lastDataRow + ')');
-
-  var totalRange = ws.getRange(totalRow, 1, 1, 9);
-  totalRange.setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
+  if (sortedStaff.length > 0) {
+    ws.getRange(totalRow, 4).setFormula('=SUM(D' + dataStartRow + ':D' + lastDataRow + ')');
+    ws.getRange(totalRow, 6).setFormula('=SUM(F' + dataStartRow + ':F' + lastDataRow + ')');
+    ws.getRange(totalRow, 8).setFormula('=SUM(H' + dataStartRow + ':H' + lastDataRow + ')');
+  }
+  ws.getRange(totalRow, 1, 1, 9).setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
     .setHorizontalAlignment('center').setVerticalAlignment('middle')
     .setBorder(true, true, true, true, true, true);
   ws.setRowHeight(totalRow, 50);
 
   var signRow = totalRow + 2;
   ws.getRange(signRow, 1).setValue('承辦').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
-  ws.getRange(signRow, 3, 1, 2).merge();
-  ws.getRange(signRow, 3).setValue('出納').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
-  ws.getRange(signRow, 6, 1, 2).merge();
-  ws.getRange(signRow, 6).setValue('會計').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
+  ws.getRange(signRow, 3, 1, 2).merge().setValue('出納').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
+  ws.getRange(signRow, 6, 1, 2).merge().setValue('會計').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
   ws.getRange(signRow, 8).setValue('校長').setFontFamily('標楷體').setFontSize(14).setFontWeight('bold');
 
   var fileId = newSS.getId();
   queueFileMove(fileId);
-  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
-
   return {
     success: true,
     fileName: fileName,
-    sheetUrl: sheetUrl
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/' + fileId
   };
 }
 
-// ===== Task 6: 薪資條 XLS 生成 =====
+// ===== Task 6: 薪資條（沿用結構，讀取改用 helpers） =====
 
 function exportPayslip(yearStr, monthStr) {
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var config = {};
-  for (var i = 0; i < settings.length; i++) config[settings[i][0]] = settings[i][1];
-
+  var config = readSettingsMap_();
   var year = parseInt(yearStr);
   var month = parseInt(monthStr);
   var hourlyRate = parseInt(config['鐘點費單價']);
@@ -863,8 +823,7 @@ function exportPayslip(yearStr, monthStr) {
   var lastDay = new Date(westYear, month, 0).getDate();
   var periodStr = month + '月1日～' + month + '月' + lastDay + '日';
 
-  var staffSheet = getSheet('人員名冊');
-  var staffData = staffSheet.getDataRange().getValues();
+  var staffData = getSheetValues_('人員名冊', 6);
   var staffList = [];
   for (var i = 1; i < staffData.length; i++) {
     if (staffData[i][2] === '在職') {
@@ -878,13 +837,12 @@ function exportPayslip(yearStr, monthStr) {
     }
   }
 
-  var logSheet = getSheet('教學日誌');
-  var logData = logSheet.getDataRange().getValues();
+  var logData = getSheetValues_('教學日誌', 6);
   var teacherStats = {};
   for (var i = 1; i < logData.length; i++) {
     var d = logData[i][0];
     if (!(d instanceof Date)) continue;
-    if (d.getFullYear() - 1911 === year && d.getMonth() + 1 === month) {
+    if ((d.getFullYear() - 1911) === year && (d.getMonth() + 1) === month) {
       var teacher = logData[i][5];
       if (!teacherStats[teacher]) teacherStats[teacher] = { days: 0, dates: [] };
       teacherStats[teacher].days++;
@@ -895,20 +853,11 @@ function exportPayslip(yearStr, monthStr) {
   var fileName = config['學校名稱'] + '補校支給費用 ' + year + '年' + month + '月薪資條';
   var newSS = SpreadsheetApp.create(fileName);
   var ws = newSS.getActiveSheet();
-
-  ws.setColumnWidth(1, 80);
-  ws.setColumnWidth(2, 130);
-  ws.setColumnWidth(3, 55);
-  ws.setColumnWidth(4, 55);
-  ws.setColumnWidth(5, 55);
-  ws.setColumnWidth(6, 70);
-  ws.setColumnWidth(7, 70);
-  ws.setColumnWidth(8, 70);
-  ws.setColumnWidth(9, 280);
+  var widths = [80, 130, 55, 55, 55, 70, 70, 70, 280];
+  for (var w = 0; w < widths.length; w++) ws.setColumnWidth(w + 1, widths[w]);
 
   var currentRow = 1;
   var schoolName = config['學校名稱'];
-
   var sortedStaff = staffList.sort(function(a, b) {
     var order = { '校長': 0, '導師': 1, '進修部主任': 2, '教師': 3 };
     return (order[a.role] || 9) - (order[b.role] || 9);
@@ -919,31 +868,26 @@ function exportPayslip(yearStr, monthStr) {
     var stats = teacherStats[s.name] || { days: 0, dates: [] };
     var isSchoolMaster = (s.role === '校長');
 
-    ws.getRange(currentRow, 1, 1, 9).merge();
-    var titleSuffix = '';
-    if (isSchoolMaster) {
-      titleSuffix = s.extraFeeName;
-    } else if (s.extraFeeName) {
-      titleSuffix = '鐘點費與' + s.extraFeeName;
-    } else {
-      titleSuffix = '鐘點費';
-    }
-    ws.getRange(currentRow, 1).setValue(schoolName + '補校支給費用   ' + year + '年' +
-      (month < 10 ? '0' : '') + month + '月' + titleSuffix)
+    var titleSuffix = isSchoolMaster ? s.extraFeeName :
+      (s.extraFeeName ? ('鐘點費與' + s.extraFeeName) : '鐘點費');
+    ws.getRange(currentRow, 1, 1, 9).merge()
+      .setValue(schoolName + '補校支給費用   ' + year + '年' +
+        (month < 10 ? '0' : '') + month + '月' + titleSuffix)
       .setFontFamily('標楷體').setFontSize(13).setFontWeight('bold');
     ws.setRowHeight(currentRow, 28);
     currentRow++;
 
+    var headerRow;
     if (isSchoolMaster) {
-      var h = ['姓名', '上課期間', s.extraFeeName, '', '', '', '', '合計', '備註'];
-      ws.getRange(currentRow, 1, 1, 9).setValues([h]);
+      headerRow = ['姓名', '上課期間', s.extraFeeName, '', '', '', '', '合計', '備註'];
+      ws.getRange(currentRow, 1, 1, 9).setValues([headerRow]);
       ws.getRange(currentRow, 3, 1, 5).merge();
     } else if (s.extraFeeName) {
-      var h = ['姓名', '上課期間', '天數', '節數', '單價', '合計', s.extraFeeName, '合計', '備註'];
-      ws.getRange(currentRow, 1, 1, 9).setValues([h]);
+      headerRow = ['姓名', '上課期間', '天數', '節數', '單價', '合計', s.extraFeeName, '合計', '備註'];
+      ws.getRange(currentRow, 1, 1, 9).setValues([headerRow]);
     } else {
-      var h = ['姓名', '上課期間', '天數', '節數', '單價', '合計', '', '', '備註'];
-      ws.getRange(currentRow, 1, 1, 9).setValues([h]);
+      headerRow = ['姓名', '上課期間', '天數', '節數', '單價', '合計', '', '', '備註'];
+      ws.getRange(currentRow, 1, 1, 9).setValues([headerRow]);
       ws.getRange(currentRow, 6, 1, 3).merge();
     }
     ws.getRange(currentRow, 1, 1, 9).setFontFamily('標楷體').setFontSize(13).setFontWeight('bold')
@@ -953,44 +897,32 @@ function exportPayslip(yearStr, monthStr) {
     currentRow++;
 
     if (isSchoolMaster) {
-      ws.getRange(currentRow, 1).setValue(s.name);
-      ws.getRange(currentRow, 2).setValue(periodStr);
+      ws.getRange(currentRow, 1, 1, 9).setValues([[
+        s.name, periodStr, s.extraFeeAmount, '', '', '', '', s.extraFeeAmount, s.note
+      ]]);
       ws.getRange(currentRow, 3, 1, 5).merge();
-      ws.getRange(currentRow, 3).setValue(s.extraFeeAmount);
-      ws.getRange(currentRow, 8).setValue(s.extraFeeAmount);
-      ws.getRange(currentRow, 9).setValue(s.note);
     } else {
       var days = stats.days;
       var sessions = days * sessionsPerDay;
       var hourlyTotal = sessions * hourlyRate;
       var grandTotal = hourlyTotal + s.extraFeeAmount;
-
-      ws.getRange(currentRow, 1).setValue(s.name);
-      ws.getRange(currentRow, 2).setValue(periodStr);
-      ws.getRange(currentRow, 3).setValue(days);
-      ws.getRange(currentRow, 4).setValue(sessions);
-      ws.getRange(currentRow, 5).setValue(hourlyRate);
-      ws.getRange(currentRow, 6).setValue(hourlyTotal);
-      if (s.extraFeeName) {
-        ws.getRange(currentRow, 7).setValue(s.extraFeeAmount);
-        ws.getRange(currentRow, 8).setValue(grandTotal);
-      } else {
-        ws.getRange(currentRow, 6, 1, 3).merge();
-        ws.getRange(currentRow, 6).setValue(hourlyTotal);
-      }
-
       var remarkParts = [];
       if (s.note) remarkParts.push(s.note);
-      if (stats.dates.length > 0) {
-        remarkParts.push('授課日：' + stats.dates.join('、'));
+      remarkParts.push(stats.dates.length > 0 ? ('授課日：' + stats.dates.join('、')) : (month + '月份無授課'));
+      if (s.extraFeeName) {
+        ws.getRange(currentRow, 1, 1, 9).setValues([[
+          s.name, periodStr, days, sessions, hourlyRate, hourlyTotal, s.extraFeeAmount, grandTotal, remarkParts.join('\n')
+        ]]);
       } else {
-        remarkParts.push(month + '月份無授課');
+        ws.getRange(currentRow, 1, 1, 9).setValues([[
+          s.name, periodStr, days, sessions, hourlyRate, hourlyTotal, '', '', remarkParts.join('\n')
+        ]]);
+        ws.getRange(currentRow, 6, 1, 3).merge();
       }
-      ws.getRange(currentRow, 9).setValue(remarkParts.join('\n')).setWrap(true);
     }
 
     ws.getRange(currentRow, 1, 1, 9).setFontFamily('標楷體').setFontSize(13).setFontWeight('bold')
-      .setVerticalAlignment('middle')
+      .setVerticalAlignment('middle').setWrap(true)
       .setBorder(true, true, true, true, true, true);
     ws.getRange(currentRow, 1, 1, 8).setHorizontalAlignment('center');
     ws.setRowHeight(currentRow, 65);
@@ -999,41 +931,34 @@ function exportPayslip(yearStr, monthStr) {
 
   var fileId = newSS.getId();
   queueFileMove(fileId);
-  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
-
   return {
     success: true,
     fileName: fileName,
-    sheetUrl: sheetUrl
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/' + fileId
   };
 }
 
-// ===== Task 7: 出缺席報表 XLS 生成 =====
+// ===== Task 7: 出缺席報表（批次寫入） =====
 
 function getStudentsInRange(startStr, endStr) {
   var start = new Date(startStr);
   var end = new Date(endStr);
   end.setHours(23, 59, 59);
 
-  var attSheet = getSheet('出缺席記錄');
-  var attData = attSheet.getDataRange().getValues();
-  var headers = attData[0];
-
+  var attData = getSheetValues_('出缺席記錄');
+  var headers = attData.length ? attData[0] : [];
   var studentSet = {};
   for (var i = 1; i < attData.length; i++) {
     var d = attData[i][0];
     if (!(d instanceof Date)) continue;
     if (d >= start && d <= end) {
       for (var c = 3; c < headers.length; c++) {
-        if (attData[i][c]) {
-          studentSet[headers[c]] = true;
-        }
+        if (attData[i][c]) studentSet[headers[c]] = true;
       }
     }
   }
 
-  var studentSheet = getSheet('學生名冊');
-  var studentData = studentSheet.getDataRange().getValues();
+  var studentData = getSheetValues_('學生名冊', 2);
   var allStudents = [];
   for (var i = 1; i < studentData.length; i++) {
     allStudents.push({
@@ -1042,24 +967,18 @@ function getStudentsInRange(startStr, endStr) {
       hasRecord: studentSet[studentData[i][0]] || false
     });
   }
-
   return { success: true, students: allStudents };
 }
 
 function exportAttendance(startStr, endStr, studentsStr) {
-  var settings = getSheet('系統設定').getDataRange().getValues();
-  var config = {};
-  for (var i = 0; i < settings.length; i++) config[settings[i][0]] = settings[i][1];
-
+  var config = readSettingsMap_();
   var start = new Date(startStr);
   var end = new Date(endStr);
   end.setHours(23, 59, 59);
   var selectedStudents = studentsStr.split(',');
 
-  var attSheet = getSheet('出缺席記錄');
-  var attData = attSheet.getDataRange().getValues();
-  var headers = attData[0];
-
+  var attData = getSheetValues_('出缺席記錄');
+  var headers = attData.length ? attData[0] : [];
   var classDates = [];
   var dateRecords = {};
 
@@ -1070,21 +989,15 @@ function exportAttendance(startStr, endStr, studentsStr) {
 
     var dateStr = Utilities.formatDate(d, 'Asia/Taipei', 'M/d');
     var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    var weekday = weekdays[d.getDay()];
-    var dateKey = dateStr + '(' + weekday + ')';
-
+    var dateKey = dateStr + '(' + weekdays[d.getDay()] + ')';
     if (!dateRecords[dateKey]) {
       classDates.push({ key: dateKey, date: d });
       dateRecords[dateKey] = {};
     }
-
     for (var c = 3; c < headers.length; c++) {
-      if (attData[i][c]) {
-        dateRecords[dateKey][headers[c]] = attData[i][c];
-      }
+      if (attData[i][c]) dateRecords[dateKey][headers[c]] = attData[i][c];
     }
   }
-
   classDates.sort(function(a, b) { return a.date - b.date; });
 
   var startRoc = (start.getFullYear() - 1911) + '/' + (start.getMonth() + 1) + '/' + start.getDate();
@@ -1092,24 +1005,37 @@ function exportAttendance(startStr, endStr, studentsStr) {
   var fileName = config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] + ' 出缺席記錄表';
   var newSS = SpreadsheetApp.create(fileName);
   var ws = newSS.getActiveSheet();
-
   var totalCols = 1 + classDates.length + 2;
 
-  ws.getRange(1, 1, 1, totalCols).merge();
-  ws.getRange(1, 1).setValue(config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] +
-    ' 出缺席記錄表（' + startRoc + '～' + endRoc + '）')
+  var title = config['縣市名稱'] + config['學校名稱'] + config['進修部名稱'] +
+    ' 出缺席記錄表（' + startRoc + '～' + endRoc + '）';
+  var headerRow = ['姓名'];
+  for (var i = 0; i < classDates.length; i++) headerRow.push(classDates[i].key);
+  headerRow.push('出席天數', '出席率');
+
+  var titleRow = [title];
+  for (var t = 1; t < totalCols; t++) titleRow.push('');
+  var values = [titleRow, headerRow];
+
+  for (var si = 0; si < selectedStudents.length; si++) {
+    var name = selectedStudents[si];
+    var presentDays = 0;
+    var row = [name];
+    for (var di = 0; di < classDates.length; di++) {
+      var status = dateRecords[classDates[di].key][name] || '';
+      row.push(status);
+      if (status === '✓') presentDays++;
+    }
+    var rate = classDates.length > 0 ? Math.round(presentDays / classDates.length * 100) + '%' : '0%';
+    row.push(presentDays, rate);
+    values.push(row);
+  }
+
+  ws.getRange(1, 1, values.length, totalCols).setValues(values);
+  ws.getRange(1, 1, 1, totalCols).merge()
     .setFontFamily('標楷體').setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
   ws.setRowHeight(1, 40);
-
-  var headerRow = ['姓名'];
-  for (var i = 0; i < classDates.length; i++) {
-    headerRow.push(classDates[i].key);
-  }
-  headerRow.push('出席天數');
-  headerRow.push('出席率');
-
-  ws.getRange(2, 1, 1, totalCols).setValues([headerRow])
-    .setFontFamily('標楷體').setFontSize(12).setFontWeight('bold')
+  ws.getRange(2, 1, 1, totalCols).setFontFamily('標楷體').setFontSize(12).setFontWeight('bold')
     .setHorizontalAlignment('center').setVerticalAlignment('middle')
     .setBorder(true, true, true, true, true, true);
   ws.setRowHeight(2, 35);
@@ -1118,36 +1044,20 @@ function exportAttendance(startStr, endStr, studentsStr) {
   ws.setColumnWidth(totalCols - 1, 65);
   ws.setColumnWidth(totalCols, 60);
 
-  for (var si = 0; si < selectedStudents.length; si++) {
-    var row = si + 3;
-    var name = selectedStudents[si];
-    var presentDays = 0;
-    var totalDays = classDates.length;
-
-    ws.getRange(row, 1).setValue(name);
-    for (var di = 0; di < classDates.length; di++) {
-      var status = dateRecords[classDates[di].key][name] || '';
-      ws.getRange(row, di + 2).setValue(status).setHorizontalAlignment('center');
-      if (status === '✓') presentDays++;
-    }
-    ws.getRange(row, totalCols - 1).setValue(presentDays).setHorizontalAlignment('center');
-    var rate = totalDays > 0 ? Math.round(presentDays / totalDays * 100) + '%' : '0%';
-    ws.getRange(row, totalCols).setValue(rate).setHorizontalAlignment('center');
-
-    ws.getRange(row, 1, 1, totalCols)
-      .setFontFamily('標楷體').setFontSize(12)
-      .setVerticalAlignment('middle')
+  if (selectedStudents.length > 0) {
+    var bodyEnd = 2 + selectedStudents.length;
+    var body = ws.getRange(3, 1, bodyEnd, totalCols);
+    body.setFontFamily('標楷體').setFontSize(12).setVerticalAlignment('middle')
       .setBorder(true, true, true, true, true, true);
-    ws.setRowHeight(row, 30);
+    ws.getRange(3, 2, bodyEnd, totalCols).setHorizontalAlignment('center');
+    for (var rh = 0; rh < selectedStudents.length; rh++) ws.setRowHeight(3 + rh, 30);
   }
 
   var fileId = newSS.getId();
   queueFileMove(fileId);
-  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + fileId;
-
   return {
     success: true,
     fileName: fileName,
-    sheetUrl: sheetUrl
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/' + fileId
   };
 }
