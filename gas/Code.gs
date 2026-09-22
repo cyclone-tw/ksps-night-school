@@ -484,7 +484,7 @@ function loadAdminConfig() {
       role: staffData[i][1],
       status: staffData[i][2],
       extraFeeName: staffData[i][3] || '',
-      extraFeeAmount: staffData[i][4] || '',
+      extraFeeAmount: staffData[i][4] || 0,
       note: staffData[i][5] || ''
     });
   }
@@ -668,12 +668,11 @@ function exportTeachingLog(yearStr, monthStr) {
   ws.setRowHeight(2, 55);
 
   if (records.length > 0) {
-    var dataEnd = 2 + records.length;
-    var dataRange = ws.getRange(3, 1, dataEnd, 8);
+    var dataRange = ws.getRange(3, 1, records.length, 8);
     dataRange.setFontFamily('標楷體').setFontSize(14).setVerticalAlignment('middle')
       .setBorder(true, true, true, true, true, true);
-    ws.getRange(3, 1, dataEnd, 4).setHorizontalAlignment('center');
-    ws.getRange(3, 8, dataEnd, 8).setHorizontalAlignment('center');
+    ws.getRange(3, 1, records.length, 4).setHorizontalAlignment('center');
+    ws.getRange(3, 8, records.length, 1).setHorizontalAlignment('center');
     for (var rh = 0; rh < records.length; rh++) ws.setRowHeight(3 + rh, 55);
   }
 
@@ -776,12 +775,11 @@ function exportSalary(yearStr, monthStr) {
   ws.setRowHeight(2, 40);
 
   if (sortedStaff.length > 0) {
-    var bodyEnd = dataStartRow + sortedStaff.length - 1;
-    var body = ws.getRange(dataStartRow, 1, bodyEnd, 9);
+    var body = ws.getRange(dataStartRow, 1, sortedStaff.length, 9);
     body.setFontFamily('標楷體').setFontSize(14).setFontWeight('bold')
       .setVerticalAlignment('middle').setWrap(true)
       .setBorder(true, true, true, true, true, true);
-    ws.getRange(dataStartRow, 1, bodyEnd, 8).setHorizontalAlignment('center');
+    ws.getRange(dataStartRow, 1, sortedStaff.length, 8).setHorizontalAlignment('center');
     for (var rh = 0; rh < sortedStaff.length; rh++) ws.setRowHeight(dataStartRow + rh, 55);
   }
 
@@ -1045,11 +1043,10 @@ function exportAttendance(startStr, endStr, studentsStr) {
   ws.setColumnWidth(totalCols, 60);
 
   if (selectedStudents.length > 0) {
-    var bodyEnd = 2 + selectedStudents.length;
-    var body = ws.getRange(3, 1, bodyEnd, totalCols);
+    var body = ws.getRange(3, 1, selectedStudents.length, totalCols);
     body.setFontFamily('標楷體').setFontSize(12).setVerticalAlignment('middle')
       .setBorder(true, true, true, true, true, true);
-    ws.getRange(3, 2, bodyEnd, totalCols).setHorizontalAlignment('center');
+    ws.getRange(3, 2, selectedStudents.length, totalCols - 1).setHorizontalAlignment('center');
     for (var rh = 0; rh < selectedStudents.length; rh++) ws.setRowHeight(3 + rh, 30);
   }
 
