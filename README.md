@@ -76,9 +76,10 @@ npx @google/clasp deploy -i AKfycbxxaTfxJlZmqNBXc2gvTBb0rnUQpShm30Y8YFKfpHjIb8S5
 
 ### GAS Web App 限制
 
-- **不支援 POST 請求**：獨立部署的 GAS Web App 無法處理 POST，所有資料提交改用 GET + URL 參數
-- **匿名模式無法使用 Drive API**：以 `ANYONE_ANONYMOUS` + `USER_DEPLOYING` 部署時，`DriveApp`、`UrlFetchApp`、`Advanced Drive Service` 均不可用。報表檔案移動改用時間觸發器（以 owner 權限執行）
+- **提交**：前端優先 `POST`（`text/plain` JSON），失敗自動改 `GET` + URL 參數，維持匿名可用
+- **匿名模式無法使用 Drive API**：以 `ANYONE_ANONYMOUS` + `USER_DEPLOYING` 部署時，Web App 請求內的 `DriveApp` 不可用。報表檔案移動改用時間觸發器（以 owner 權限執行）
 - **clasp deploy 不觸發 OAuth 授權**：新增 scope 時必須在 GAS 編輯器手動部署
+- **多 Google 帳號**：同瀏覽器多帳登入可能讓 Web App 回 404；見 [`docs/ops-sharing-and-stability.md`](docs/ops-sharing-and-stability.md)
 
 詳細開發紀錄見 [`docs/development-log.md`](docs/development-log.md)
 

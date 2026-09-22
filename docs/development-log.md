@@ -99,3 +99,18 @@
 - **clasp deploy 不會觸發 OAuth 重新授權**。新增 scope 時必須在 GAS 編輯器手動部署
 - 每次 clasp push 後，需在編輯器「管理部署項目」→ 鉛筆 → 新版本 → 部署（如有新 scope 的話）
 - 觸發器只需設定一次（`setupMoveTrigger()`），之後不用再動
+
+---
+
+## 2026-09-22 穩定化 + 報表批次寫入（#1）
+
+### A 穩定
+- 前端新增 `apiGet` / `apiSubmit`：JSON 解析失敗／404 顯示多帳號提示，並指數退避重試
+- 提交優先 POST（`text/plain`），失敗自動改 GET，維持匿名填報
+- GAS 部署更新至 **version 29**（deployment URL 不變，`ANYONE_ANONYMOUS`）
+- 新增 `docs/ops-sharing-and-stability.md`（分享權限、觸發器、多帳號）
+
+### B 效能
+- `getSheetValues_` 取代多數 `getDataRange()` 全表掃描
+- 教學日誌／薪資總表／出缺席報表改批次 `setValues`
+- 設定鍵 `trim`，修正「報表資料夾ID」空白鍵名造成的讀取不一致

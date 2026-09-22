@@ -669,6 +669,94 @@
     let isAdmin = false;
     let adminPwd = '';
 
+    // ===== API helper（重試 + 可讀錯誤；匿名填報維持不變） =====
+    function sleep(ms) {
+        return new Promise(function(resolve) { setTimeout(resolve, ms); });
+    }
+
+    function friendlyApiError(text, status) {
+        var sample = String(text || '').slice(0, 400);
+        if (status === 404 || /找不到網頁|Page Not Found|Sorry,\s*unable to open/i.test(sample)) {
+            return '伺服器暫時無法回應（常見原因：瀏覽器同時登入多個 Google 帳號）。請改用無痕視窗、或先登出多餘 Google 帳號後重試。教學日誌／出缺席仍不需登入。';
+        }
+        if (/^\s*</.test(sample)) {
+            return '伺服器回傳了無法解析的內容，請稍後再試。若持續失敗，請用無痕視窗開啟本頁。';
+        }
+        return '無法連線到伺服器，請檢查網路後重試。';
+    }
+
+    function parseApiResponse(response, text) {
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            var err = new Error(friendlyApiError(text, response && response.status));
+            err.retryable = true;
+            throw err;
+        }
+    }
+
+    function apiGet(params, options) {
+        options = options || {};
+        var retries = options.retries != null ? options.retries : 3;
+        var qs = Object.keys(params).map(function(k) {
+            return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
+        }).join('&');
+        var url = API_URL + '?' + qs;
+
+        function attempt(n) {
+            return fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store' })
+                .then(function(r) {
+                    return r.text().then(function(text) {
+                        var data = parseApiResponse(r, text);
+                        return data;
+                    });
+                })
+                .catch(function(err) {
+                    var retryable = err.retryable !== false;
+                    if (retryable && n < retries) {
+                        var delay = Math.min(1000 * Math.pow(2, n), 8000) + Math.floor(Math.random() * 400);
+                        console.warn('API retry', n + 1, params.action, err.message);
+                        return sleep(delay).then(function() { return attempt(n + 1); });
+                    }
+                    throw err;
+                });
+        }
+        return attempt(0);
+    }
+
+    /** 提交優先 POST（縮短 URL）；失敗自動改 GET，維持匿名可用 */
+    function apiSubmit(payload, options) {
+        options = options || {};
+        var retries = options.retries != null ? options.retries : 2;
+        var body = JSON.stringify(payload);
+
+        function attemptPost(n) {
+            return fetch(API_URL, {
+                method: 'POST',
+                redirect: 'follow',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: body
+            }).then(function(r) {
+                return r.text().then(function(text) {
+                    return parseApiResponse(r, text);
+                });
+            }).catch(function(err) {
+                if (n < retries && err.retryable !== false) {
+                    var delay = Math.min(1000 * Math.pow(2, n), 6000);
+                    return sleep(delay).then(function() { return attemptPost(n + 1); });
+                }
+                // 獨立 Web App 環境偶發拒 POST：改走 GET
+                console.warn('POST failed, fallback GET', err && err.message);
+                return apiGet({
+                    action: payload.action,
+                    data: JSON.stringify(payload)
+                }, { retries: 3 });
+            });
+        }
+        return attemptPost(0);
+    }
+
     // ===== Init =====
     document.addEventListener('DOMContentLoaded', function() {
         initDates();
@@ -726,16 +814,14 @@
 
     // ===== Load Config from GAS =====
     function loadConfig() {
-        fetch(API_URL + '?action=load_config')
-            .then(function(r) { return r.json(); })
+        apiGet({ action: 'load_config' })
             .then(function(data) {
-                if (!data.success) { showToast('載入設定失敗: ' + data.error, 'error'); return; }
+                if (!data.success) { showToast('載入設定失敗: ' + (data.error || ''), 'error'); return; }
                 appConfig = data.config;
                 appStaff = data.staff;
                 appStudents = data.students;
                 appCourses = data.courses;
 
-                // Update title
                 if (appConfig['學校名稱']) {
                     document.getElementById('siteTitle').textContent = appConfig['學校名稱'] + appConfig['進修部名稱'] + '管理系統';
                 }
@@ -747,14 +833,13 @@
                 populateTeachers();
                 populateStudents();
 
-                // Auto-select course based on today
                 var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
                 var todayWeekday = weekdays[new Date().getDay()];
                 autoSelectCourse('log', todayWeekday);
                 autoSelectCourse('att', todayWeekday);
             })
             .catch(function(err) {
-                showToast('無法連線到伺服器', 'error');
+                showToast(err.message || '無法連線到伺服器', 'error');
                 console.error(err);
             });
     }
@@ -875,18 +960,14 @@
             teacher: document.getElementById('logTeacher').value
         };
 
-        // 先檢查該日期是否已有資料
-        fetch(API_URL + '?action=check_date&date=' + payload.date)
-        .then(function(r) { return r.json(); })
+        apiGet({ action: 'check_date', date: payload.date })
         .then(function(check) {
             if (check.hasLog && !confirm('該日期已有教學日誌紀錄，確定要覆蓋嗎？')) {
                 btn.disabled = false; btn.textContent = '提交教學日誌';
                 return;
             }
             btn.textContent = '提交中...';
-            var url = API_URL + '?action=submit_log&data=' + encodeURIComponent(JSON.stringify(payload));
-            fetch(url)
-            .then(function(r) { return r.json(); })
+            return apiSubmit(Object.assign({ action: 'submit_log' }, payload))
             .then(function(data) {
                 btn.disabled = false; btn.textContent = '提交教學日誌';
                 if (data.success) {
@@ -895,15 +976,11 @@
                 } else {
                     showToast('提交失敗: ' + data.error, 'error');
                 }
-            })
-            .catch(function(err) {
-                btn.disabled = false; btn.textContent = '提交教學日誌';
-                showToast('提交失敗，請檢查網路連線', 'error');
             });
         })
         .catch(function(err) {
             btn.disabled = false; btn.textContent = '提交教學日誌';
-            showToast('檢查失敗，請檢查網路連線', 'error');
+            showToast(err.message || '提交失敗，請檢查網路連線', 'error');
         });
     }
 
@@ -934,23 +1011,18 @@
             attendance: attendance
         };
 
-        // 先檢查該日期是否已有資料
-        fetch(API_URL + '?action=check_date&date=' + payload.date)
-        .then(function(r) { return r.json(); })
+        apiGet({ action: 'check_date', date: payload.date })
         .then(function(check) {
             if (check.hasAttendance && !confirm('該日期已有出缺席紀錄，確定要覆蓋嗎？')) {
                 btn.disabled = false; btn.textContent = '提交出缺席記錄';
                 return;
             }
             btn.textContent = '提交中...';
-            var url = API_URL + '?action=submit_attendance&data=' + encodeURIComponent(JSON.stringify(payload));
-            fetch(url)
-            .then(function(r) { return r.json(); })
+            return apiSubmit(Object.assign({ action: 'submit_attendance' }, payload))
             .then(function(data) {
                 btn.disabled = false; btn.textContent = '提交出缺席記錄';
                 if (data.success) {
                     showToast('出缺席記錄提交成功！', 'success');
-                    // Reset
                     appStudents.forEach(function(s, idx) {
                         var hidden = document.querySelector('input[name="att_' + idx + '"]');
                         hidden.value = '';
@@ -960,15 +1032,11 @@
                 } else {
                     showToast('提交失敗: ' + data.error, 'error');
                 }
-            })
-            .catch(function(err) {
-                btn.disabled = false; btn.textContent = '提交出缺席記錄';
-                showToast('提交失敗，請檢查網路連線', 'error');
             });
         })
         .catch(function(err) {
             btn.disabled = false; btn.textContent = '提交出缺席記錄';
-            showToast('檢查失敗，請檢查網路連線', 'error');
+            showToast(err.message || '提交失敗，請檢查網路連線', 'error');
         });
     }
 
@@ -1046,8 +1114,7 @@
         var pwd = document.getElementById('adminPwd').value;
         if (!pwd) return;
 
-        fetch(API_URL + '?action=verify_admin&pwd=' + encodeURIComponent(pwd))
-            .then(function(r) { return r.json(); })
+        apiGet({ action: 'verify_admin', pwd: pwd })
             .then(function(data) {
                 if (data.success) {
                     adminPwd = pwd;
@@ -1061,8 +1128,8 @@
                     showToast('密碼錯誤', 'error');
                 }
             })
-            .catch(function() {
-                showToast('驗證失敗，請檢查網路', 'error');
+            .catch(function(err) {
+                showToast(err.message || '驗證失敗，請檢查網路', 'error');
             });
     }
 
@@ -1077,8 +1144,7 @@
     function checkSession() {
         var savedPwd = sessionStorage.getItem('adminPwd');
         if (savedPwd) {
-            fetch(API_URL + '?action=verify_admin&pwd=' + encodeURIComponent(savedPwd))
-                .then(function(r) { return r.json(); })
+            apiGet({ action: 'verify_admin', pwd: savedPwd }, { retries: 2 })
                 .then(function(data) {
                     if (data.success) {
                         adminPwd = savedPwd;
@@ -1088,7 +1154,8 @@
                     } else {
                         sessionStorage.removeItem('adminPwd');
                     }
-                });
+                })
+                .catch(function(err) { console.warn('session restore failed', err); });
         }
     }
 
@@ -1150,10 +1217,12 @@
         if (!isAdmin) return;
         initDashDateSelect();
         var selectedDate = document.getElementById('dashDateSelect').value;
-        fetch(API_URL + '?action=get_dashboard&date=' + selectedDate + '&pwd=' + encodeURIComponent(adminPwd))
-            .then(function(r) { return r.json(); })
+        apiGet({ action: 'get_dashboard', date: selectedDate, pwd: adminPwd })
             .then(function(data) {
-                if (!data.success) return;
+                if (!data.success) {
+                    if (data.error) showToast(data.error, 'error');
+                    return;
+                }
 
                 // Stats
                 var att = data.attendance;
@@ -1192,6 +1261,9 @@
                             '</div>';
                     });
                 }
+            })
+            .catch(function(err) {
+                showToast(err.message || '載入總覽失敗', 'error');
             });
     }
 
@@ -1205,11 +1277,7 @@
         var origText = btn.textContent;
         btn.disabled = true; btn.textContent = '處理中...';
 
-        var url = API_URL + '?action=' + action + '&year=' + year + '&month=' + month +
-                  '&pwd=' + encodeURIComponent(adminPwd);
-
-        fetch(url)
-            .then(function(r) { return r.json(); })
+        apiGet({ action: action, year: year, month: month, pwd: adminPwd }, { retries: 2 })
             .then(function(data) {
                 btn.disabled = false; btn.textContent = origText;
                 if (data.success) {
@@ -1218,9 +1286,9 @@
                     showToast('生成失敗: ' + data.error, 'error');
                 }
             })
-            .catch(function() {
+            .catch(function(err) {
                 btn.disabled = false; btn.textContent = origText;
-                showToast('生成失敗，請檢查網路', 'error');
+                showToast(err.message || '生成失敗，請檢查網路', 'error');
             });
     }
 
@@ -1232,11 +1300,7 @@
         var btn = document.getElementById('btnQueryStudents');
         btn.disabled = true; btn.textContent = '查詢中...';
 
-        var url = API_URL + '?action=get_students_in_range&start=' + start + '&end=' + end +
-                  '&pwd=' + encodeURIComponent(adminPwd);
-
-        fetch(url)
-            .then(function(r) { return r.json(); })
+        apiGet({ action: 'get_students_in_range', start: start, end: end, pwd: adminPwd })
             .then(function(data) {
                 btn.disabled = false; btn.textContent = '查詢學生';
                 if (!data.success) { showToast(data.error, 'error'); return; }
@@ -1253,9 +1317,9 @@
                 });
                 area.style.display = 'block';
             })
-            .catch(function() {
+            .catch(function(err) {
                 btn.disabled = false; btn.textContent = '查詢學生';
-                showToast('查詢失敗', 'error');
+                showToast(err.message || '查詢失敗', 'error');
             });
     }
 
@@ -1277,12 +1341,13 @@
         var btn = document.getElementById('btnExportAtt');
         btn.disabled = true; btn.textContent = '生成中...';
 
-        var url = API_URL + '?action=export_attendance&start=' + start + '&end=' + end +
-                  '&students=' + encodeURIComponent(students.join(',')) +
-                  '&pwd=' + encodeURIComponent(adminPwd);
-
-        fetch(url)
-            .then(function(r) { return r.json(); })
+        apiGet({
+            action: 'export_attendance',
+            start: start,
+            end: end,
+            students: students.join(','),
+            pwd: adminPwd
+        }, { retries: 2 })
             .then(function(data) {
                 btn.disabled = false; btn.textContent = '生成出缺席報表 XLS';
                 if (data.success) {
@@ -1291,9 +1356,9 @@
                     showToast('生成失敗: ' + data.error, 'error');
                 }
             })
-            .catch(function() {
+            .catch(function(err) {
                 btn.disabled = false; btn.textContent = '生成出缺席報表 XLS';
-                showToast('生成失敗', 'error');
+                showToast(err.message || '生成失敗', 'error');
             });
     }
 
@@ -1302,7 +1367,8 @@
         var toast = document.getElementById('toast');
         toast.textContent = msg;
         toast.className = 'toast ' + (type || 'info') + ' show';
-        setTimeout(function() { toast.classList.remove('show'); }, 3000);
+        var ms = (type === 'error' && String(msg).length > 40) ? 8000 : 3500;
+        setTimeout(function() { toast.classList.remove('show'); }, ms);
     }
     </script>
 </body>
